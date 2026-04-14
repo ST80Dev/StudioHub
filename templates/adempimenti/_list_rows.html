@@ -1,0 +1,27 @@
+{% for a in adempimenti %}
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+    <td class="px-3">
+        <a href="{{ a.get_absolute_url }}" class="font-medium hover:underline">
+            {{ a.anagrafica.denominazione }}
+        </a>
+        <div class="font-mono text-[11px] text-slate-400">{{ a.anagrafica.codice_interno }}</div>
+    </td>
+    <td class="px-3">{{ a.get_tipo_display }}</td>
+    <td class="px-3 tabular-nums">{{ a.anno_fiscale }}</td>
+    <td class="px-3 tabular-nums">{{ a.anno_esecuzione }}</td>
+    <td class="px-3 text-xs">
+        {% for r in a.addetti_contabilita_cliente %}
+            {{ r.utente }}{% if not forloop.last %},{% endif %}
+        {% empty %}<span class="text-slate-400">—</span>{% endfor %}
+    </td>
+    <td class="px-3 text-xs">
+        {% for r in a.responsabili_consulenza_cliente %}
+            {{ r.utente }}{% if not forloop.last %},{% endif %}
+        {% empty %}<span class="text-slate-400">—</span>{% endfor %}
+    </td>
+    <td class="px-3 text-xs">{{ a.responsabile|default:"—" }}</td>
+    <td class="px-3">{% include "adempimenti/_stato_badge.html" with stato=a.stato %}</td>
+</tr>
+{% empty %}
+<tr><td colspan="8" class="px-3 py-8 text-center text-sm text-slate-500">Nessun adempimento trovato.</td></tr>
+{% endfor %}

@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}{{ cliente.denominazione }} — StudioHub{% endblock %}
+
+{% block content %}
+<div class="mb-3 flex items-center justify-between">
+    <div>
+        <div class="text-[11px] uppercase tracking-wider text-slate-500">
+            <a href="{% url 'anagrafica:list' %}" class="hover:underline">Clienti</a> /
+        </div>
+        <h1 class="text-lg font-semibold">{{ cliente.denominazione }}</h1>
+        <div class="text-xs text-slate-500">
+            {{ cliente.codice_interno }} · {{ cliente.get_tipo_soggetto_display }}
+        </div>
+    </div>
+    <a href="/admin/anagrafica/anagrafica/{{ cliente.pk }}/change/"
+       class="rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800">
+        Modifica
+    </a>
+</div>
+
+<div class="grid grid-cols-1 gap-3 lg:grid-cols-3">
+    <div class="rounded-md border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+        <div class="mb-2 text-[11px] uppercase tracking-wider text-slate-500">Identificazione</div>
+        <dl class="grid grid-cols-3 gap-y-1 text-sm">
+            <dt class="col-span-1 text-slate-500">Tipo</dt><dd class="col-span-2">{{ cliente.get_tipo_soggetto_display }}</dd>
+            <dt class="col-span-1 text-slate-500">Codice fisc.</dt><dd class="col-span-2 font-mono text-xs">{{ cliente.codice_fiscale|default:"—" }}</dd>
+            <dt class="col-span-1 text-slate-500">P.IVA</dt><dd class="col-span-2 font-mono text-xs">{{ cliente.partita_iva|default:"—" }}</dd>
+            <dt class="col-span-1 text-slate-500">Stato</dt><dd class="col-span-2">{{ cliente.get_stato_display }}</dd>
+            <dt class="col-span-1 text-slate-500">Mandato</dt><dd class="col-span-2">{{ cliente.data_inizio_mandato|default:"—" }} → {{ cliente.data_fine_mandato|default:"in corso" }}</dd>
+        </dl>
+    </div>
+
+    <div class="rounded-md border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+        <div class="mb-2 text-[11px] uppercase tracking-wider text-slate-500">Contatto</div>
+        <dl class="grid grid-cols-3 gap-y-1 text-sm">
+            <dt class="col-span-1 text-slate-500">Email</dt><dd class="col-span-2">{{ cliente.email|default:"—" }}</dd>
+            <dt class="col-span-1 text-slate-500">Indirizzo</dt>
+            <dd class="col-span-2">
+                {{ cliente.indirizzo_via }} {{ cliente.indirizzo_civico }}<br>
+                {{ cliente.indirizzo_cap }} {{ cliente.indirizzo_comune }}
+                {% if cliente.indirizzo_provincia %}({{ cliente.indirizzo_provincia }}){% endif %}
+            </dd>
+        </dl>
+    </div>
+
+    <div class="rounded-md border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+        <div class="mb-2 text-[11px] uppercase tracking-wider text-slate-500">Fiscale operativo</div>
+        <dl class="grid grid-cols-3 gap-y-1 text-sm">
+            <dt class="col-span-1 text-slate-500">Regime</dt><dd class="col-span-2">{{ cliente.get_regime_contabile_display|default:"—" }}</dd>
+            <dt class="col-span-1 text-slate-500">Periodicità IVA</dt><dd class="col-span-2">{{ cliente.get_periodicita_iva_display|default:"—" }}</dd>
+        </dl>
+    </div>
+</div>
+
+<div class="mt-4 rounded-md border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+    <div class="flex items-center justify-between border-b border-slate-200 px-3 py-2 dark:border-slate-800">
+        <span class="text-sm font-medium">Referenti studio attivi</span>
+    </div>
+    {% if referenti_attivi %}
+    <table class="sh-table w-full text-sm">
+        <thead>
+            <tr class="text-left text-[11px] uppercase tracking-wider text-slate-500">
+                <th class="px-3">Utente</th>
+                <th class="px-3">Ruolo</th>
+                <th class="px-3">Principale</th>
+                <th class="px-3">Dal</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+            {% for r in referenti_attivi %}
+            <tr>
+                <td class="px-3">{{ r.utente }}</td>
+                <td class="px-3">{{ r.get_ruolo_display }}</td>
+                <td class="px-3">{% if r.principale %}★{% endif %}</td>
+                <td class="px-3 font-mono text-xs">{{ r.data_inizio|date:"d/m/Y" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="px-3 py-4 text-sm text-slate-500">Nessun referente attivo.</div>
+    {% endif %}
+</div>
+
+{% if legami %}
+<div class="mt-4 rounded-md border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+    <div class="border-b border-slate-200 px-3 py-2 text-sm font-medium dark:border-slate-800">Gruppo / Legami</div>
+    <ul class="divide-y divide-slate-100 dark:divide-slate-800">
+        {% for l in legami %}
+        <li class="px-3 py-1.5 text-sm">
+            <a href="{{ l.anagrafica_collegata.get_absolute_url }}" class="hover:underline">{{ l.anagrafica_collegata }}</a>
+            <span class="text-xs text-slate-500">— {{ l.get_tipo_legame_display }}</span>
+        </li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+{% endblock %}

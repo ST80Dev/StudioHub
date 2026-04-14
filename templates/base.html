@@ -1,0 +1,67 @@
+{% load static %}<!doctype html>
+<html lang="it" class="{% if current_theme == 'dark' %}dark{% endif %}" data-theme="{{ current_theme|default:'auto' }}" data-density="{{ current_density|default:'compatta' }}">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}StudioHub{% endblock %}</title>
+    <meta name="htmx-config" content='{"includeIndicatorStyles": false}'>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              brand: {
+                50:  '#eff6ff',
+                100: '#dbeafe',
+                500: '#3b82f6',
+                600: '#2563eb',
+                700: '#1d4ed8',
+              }
+            }
+          }
+        }
+      };
+      // Rispetta la preferenza utente: auto = segue OS
+      (function () {
+        const root = document.documentElement;
+        const theme = root.dataset.theme || 'auto';
+        const apply = () => {
+          if (theme === 'dark' ||
+              (theme === 'auto' &&
+               window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            root.classList.add('dark');
+          } else {
+            root.classList.remove('dark');
+          }
+        };
+        apply();
+        if (theme === 'auto') {
+          window.matchMedia('(prefers-color-scheme: dark)')
+                .addEventListener('change', apply);
+        }
+      })();
+    </script>
+    <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
+    <script src="https://unpkg.com/alpinejs@3.14.1" defer></script>
+    <link rel="stylesheet" href="{% static 'css/studiohub.css' %}">
+</head>
+<body class="h-full bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-200 antialiased">
+    {% if user.is_authenticated %}
+    <div class="flex h-screen overflow-hidden">
+        {% include "partials/_sidebar.html" %}
+        <div class="flex flex-1 flex-col overflow-hidden">
+            {% include "partials/_topbar.html" %}
+            <main class="flex-1 overflow-auto">
+                <div class="px-4 py-3">
+                    {% block content %}{% endblock %}
+                </div>
+            </main>
+        </div>
+    </div>
+    {% else %}
+        {% block auth_content %}{% endblock %}
+    {% endif %}
+</body>
+</html>

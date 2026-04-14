@@ -1,0 +1,57 @@
+/* Stili di supporto allo stile "gestionale denso" su Tailwind CDN. */
+
+/* Densità compatta: righe delle tabelle più corte */
+html[data-density="compatta"] table.sh-table th,
+html[data-density="compatta"] table.sh-table td {
+    padding-top: 0.25rem;
+    padding-bottom: 0.25rem;
+    font-size: 13px;
+    line-height: 1.2;
+}
+
+html[data-density="standard"] table.sh-table th,
+html[data-density="standard"] table.sh-table td {
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+    font-size: 14px;
+}
+
+/* Header sticky su tabelle dati */
+table.sh-table thead th {
+    position: sticky;
+    top: 0;
+    background: rgb(241 245 249);
+    z-index: 1;
+}
+html.dark table.sh-table thead th {
+    background: rgb(30 41 59);
+}
+
+/* Prima colonna sticky (opzionale: si attiva con class sh-table-sticky-first) */
+table.sh-table-sticky-first tbody td:first-child,
+table.sh-table-sticky-first thead th:first-child {
+    position: sticky;
+    left: 0;
+    background: inherit;
+    z-index: 2;
+}
+
+/* Colori semantici stati (rispettosi di light/dark) */
+.sh-state {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0 0.4rem;
+    border-radius: 0.25rem;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 18px;
+}
+.sh-state.sh-state-done   { background: rgb(220 252 231); color: rgb(21 128 61); }
+.sh-state.sh-state-wip    { background: rgb(254 243 199); color: rgb(146 64 14); }
+.sh-state.sh-state-todo   { background: rgb(254 226 226); color: rgb(153 27 27); }
+.sh-state.sh-state-idle   { background: rgb(226 232 240); color: rgb(51 65 85); }
+html.dark .sh-state.sh-state-done { background: rgba(22,101,52,.25); color: rgb(134 239 172); }
+html.dark .sh-state.sh-state-wip  { background: rgba(146,64,14,.25);  color: rgb(253 224 71); }
+html.dark .sh-state.sh-state-todo { background: rgba(153,27,27,.25);  color: rgb(252 165 165); }
+html.dark .sh-state.sh-state-idle { background: rgba(51,65,85,.4);    color: rgb(203 213 225); }

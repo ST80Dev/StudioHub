@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Adempimenti — StudioHub{% endblock %}
+
+{% block content %}
+<div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+    <div>
+        <h1 class="text-lg font-semibold">Adempimenti</h1>
+        <p class="text-xs text-slate-500">{{ totale }} risultati</p>
+    </div>
+    <a href="/admin/adempimenti/adempimento/add/"
+       class="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
+        + Nuovo
+    </a>
+</div>
+
+<form method="get" class="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white p-2 text-sm dark:border-slate-800 dark:bg-slate-900">
+    <input type="text" name="q" value="{{ q }}" placeholder="Cerca cliente…"
+           class="w-64 rounded-md border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-800">
+    <select name="tipo" class="rounded-md border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-800">
+        <option value="">Tutti i tipi</option>
+        {% for val, lbl in tipi %}
+        <option value="{{ val }}" {% if tipo == val %}selected{% endif %}>{{ lbl }}</option>
+        {% endfor %}
+    </select>
+    <input type="number" name="anno_fiscale" value="{{ anno_fiscale }}" placeholder="Anno fisc."
+           class="w-28 rounded-md border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-800">
+    <input type="number" name="anno_esecuzione" value="{{ anno_esecuzione }}" placeholder="Anno esec."
+           class="w-28 rounded-md border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-800">
+    <button type="submit" class="rounded-md border border-slate-300 px-3 py-1 hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800">Filtra</button>
+    {% if q or tipo or anno_fiscale or anno_esecuzione or esecutore %}
+    <a href="{% url 'adempimenti:list' %}" class="text-xs text-slate-500 hover:underline">Azzera</a>
+    {% endif %}
+</form>
+
+<div class="overflow-auto rounded-md border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+    <table class="sh-table sh-table-sticky-first w-full">
+        <thead>
+            <tr class="text-left text-[11px] uppercase tracking-wider text-slate-500">
+                <th class="px-3">Cliente</th>
+                <th class="px-3">Tipo</th>
+                <th class="px-3">Anno fisc.</th>
+                <th class="px-3">Anno esec.</th>
+                <th class="px-3">Addetto contab.</th>
+                <th class="px-3">Resp. consulenza</th>
+                <th class="px-3">Esecutore</th>
+                <th class="px-3">Stato</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+            {% include "adempimenti/_list_rows.html" %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
