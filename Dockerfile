@@ -4,6 +4,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
+# Utente non-root per l'app
+RUN useradd --system --uid 1001 --gid 0 --create-home --home-dir /home/app app
+
 WORKDIR /app
 
 RUN apt-get update \
@@ -13,10 +16,16 @@ RUN apt-get update \
         curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+COPY --chown=app:0 requirements.txt .
 RUN pip install -r requirements.txt
 
-COPY . .
+COPY --chown=app:0 . .
+
+# Cartelle scrivibili dall'app
+RUN mkdir -p /app/staticfiles /app/media \
+    && chown -R app:0 /app/staticfiles /app/media
+
+USER app
 
 EXPOSE 8000
 

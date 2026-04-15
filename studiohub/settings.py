@@ -14,6 +14,14 @@ ALLOWED_HOSTS = config(
     cast=Csv(),
 )
 
+# Origini CSRF accettate quando l'app e dietro reverse proxy (Caddy).
+# In produzione deve contenere almeno l'URL HTTPS pubblico del sito.
+CSRF_TRUSTED_ORIGINS = config(
+    "DJANGO_CSRF_TRUSTED_ORIGINS",
+    default="",
+    cast=Csv(),
+)
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",

@@ -1,0 +1,39 @@
+# ===================================================================
+# Snippet StudioHub — DA APPENDERE a /etc/caddy/Caddyfile esistente.
+#
+# Prima di applicare:
+#   1) Sostituisci VOSTRO-DOMINIO.TLD con il dominio reale.
+#   2) Verifica che il record A "studiohub" su Aruba punti all'IP
+#      pubblico fisso dello studio.
+#   3) Verifica che la porta 443 del router inoltri a 192.168.1.16:443
+#      (Caddy si occupa di TLS automatico via Let's Encrypt).
+#
+# Test:
+#   sudo caddy validate --config /etc/caddy/Caddyfile
+#   sudo systemctl reload caddy
+# ===================================================================
+
+studiohub.VOSTRO-DOMINIO.TLD {
+    encode gzip zstd
+
+    # Reverse proxy al container web (esposto solo sul loopback).
+    reverse_proxy 127.0.0.1:8100
+
+    # Header di sicurezza base.
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options    "nosniff"
+        Referrer-Policy           "strict-origin-when-cross-origin"
+        Permissions-Policy        "geolocation=(), microphone=(), camera=()"
+        -Server
+    }
+
+    # Log dedicato (opzionale ma consigliato).
+    log {
+        output file /var/log/caddy/studiohub.log {
+            roll_size 50mb
+            roll_keep 10
+        }
+        format json
+    }
+}

@@ -1,0 +1,44 @@
+name: Deploy StudioHub (self-hosted)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: studiohub-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, studiohub]
+    timeout-minutes: 20
+
+    steps:
+      - name: Verifica runner
+        run: |
+          echo "Runner: $(hostname) | user: $(whoami)"
+          id
+          docker --version
+          docker compose version
+
+      - name: Deploy
+        env:
+          APP_DIR: /opt/studiohub
+        working-directory: /opt/studiohub
+        run: bash scripts/deploy.sh
+
+      - name: Smoke test
+        run: |
+          # Attesa breve che il container web sia up e rispondente
+          for i in $(seq 1 30); do
+            if curl -sfI http://127.0.0.1:8100/ > /dev/null 2>&1 \
+               || curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8100/ | grep -qE "^(200|301|302)$"; then
+              echo "Web OK al tentativo $i"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Smoke test fallito: il web non risponde su 127.0.0.1:8100"
+          docker compose -f /opt/studiohub/docker-compose.prod.yml logs --tail=100 web
+          exit 1

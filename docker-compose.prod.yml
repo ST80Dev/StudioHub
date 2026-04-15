@@ -1,0 +1,80 @@
+# Stack di produzione StudioHub.
+#
+# Differenze rispetto al docker-compose.yml di sviluppo:
+# - Postgres NON espone la porta sull'host (resta nella rete interna Docker).
+# - web espone sul loopback host (127.0.0.1:8100) solo per Caddy nativo.
+# - web gira gunicorn (non runserver), con migrate + collectstatic all'avvio.
+# - worker django-q2 per job schedulati (backup futuri, sync, ecc.).
+# - Niente bind-mount del codice: il codice vive dentro l'immagine buildata.
+#
+# Uso:
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Per amministrazione con pgAdmin esistente, se servirà, si potrà unire
+# il network "studiohub_internal" al container pgAdmin (non automatico qui).
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build: .
+    restart: unless-stopped
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py collectstatic --noinput &&
+             gunicorn studiohub.wsgi:application
+               --bind 0.0.0.0:8000
+               --workers 3
+               --access-logfile -
+               --error-logfile -"
+    env_file:
+      - .env
+    volumes:
+      - staticfiles:/app/staticfiles
+      - media:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      # Esposto SOLO sul loopback dell'host; Caddy nativo fa reverse_proxy qui.
+      - "127.0.0.1:8100:8000"
+    networks:
+      - internal
+
+  worker:
+    build: .
+    restart: unless-stopped
+    command: python manage.py qcluster
+    env_file:
+      - .env
+    volumes:
+      - media:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - internal
+
+volumes:
+  pgdata:
+  staticfiles:
+  media:
+
+networks:
+  internal:
+    driver: bridge
