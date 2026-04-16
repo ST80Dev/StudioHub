@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Accedi — StudioHub{% endblock %}
+
+{% block auth_content %}
+<div class="flex min-h-screen items-center justify-center bg-slate-100 px-4 dark:bg-slate-950">
+    <div class="w-full max-w-sm rounded-lg border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div class="mb-4 flex items-center gap-2">
+            <span class="inline-flex h-8 w-8 items-center justify-center rounded bg-brand-600 text-sm font-bold text-white">SH</span>
+            <h1 class="text-lg font-semibold">StudioHub</h1>
+        </div>
+        <form method="post" class="space-y-3">
+            {% csrf_token %}
+            {% if form.errors %}
+            <div class="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">
+                Credenziali non valide.
+            </div>
+            {% endif %}
+            <div>
+                <label class="block text-xs text-slate-500 dark:text-slate-400">Utente</label>
+                <input type="text" name="username" autocomplete="username" required autofocus
+                       class="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-800">
+            </div>
+            <div>
+                <label class="block text-xs text-slate-500 dark:text-slate-400">Password</label>
+                <input type="password" name="password" autocomplete="current-password" required
+                       class="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-800">
+            </div>
+            <button type="submit" class="w-full rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">Accedi</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

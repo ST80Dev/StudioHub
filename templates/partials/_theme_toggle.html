@@ -1,0 +1,22 @@
+{% comment %}
+Toggle rapido tema: chiaro → scuro → auto → chiaro. Aggiorna il profilo utente.
+{% endcomment %}
+<form method="post" action="{% url 'accounts:cambia_tema' %}" class="flex">
+    {% csrf_token %}
+    {% if current_theme == 'light' %}
+        <input type="hidden" name="tema" value="dark">
+        <button type="submit" title="Tema chiaro — clic per scuro"
+                class="rounded-md px-2 py-1 text-sm hover:bg-slate-100 dark:hover:bg-slate-800"
+                hx-post="{% url 'accounts:cambia_tema' %}" hx-swap="none">☀️</button>
+    {% elif current_theme == 'dark' %}
+        <input type="hidden" name="tema" value="auto">
+        <button type="submit" title="Tema scuro — clic per auto"
+                class="rounded-md px-2 py-1 text-sm hover:bg-slate-100 dark:hover:bg-slate-800"
+                hx-post="{% url 'accounts:cambia_tema' %}" hx-swap="none">🌙</button>
+    {% else %}
+        <input type="hidden" name="tema" value="light">
+        <button type="submit" title="Tema auto — clic per chiaro"
+                class="rounded-md px-2 py-1 text-sm hover:bg-slate-100 dark:hover:bg-slate-800"
+                hx-post="{% url 'accounts:cambia_tema' %}" hx-swap="none">🖥️</button>
+    {% endif %}
+</form>

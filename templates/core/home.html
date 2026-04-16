@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Home — StudioHub{% endblock %}
+
+{% block content %}
+<div class="mb-3 flex items-baseline justify-between">
+    <h1 class="text-lg font-semibold">Ciao {{ user.first_name|default:user.username }}</h1>
+    <span class="text-xs text-slate-500">Dashboard personale</span>
+</div>
+
+<div class="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+    <div class="rounded-md border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+        <div class="text-[11px] uppercase tracking-wider text-slate-500">Clienti attivi</div>
+        <div class="mt-1 text-2xl font-semibold">{{ clienti_attivi }}</div>
+    </div>
+    <div class="rounded-md border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+        <div class="text-[11px] uppercase tracking-wider text-slate-500">Adempimenti totali</div>
+        <div class="mt-1 text-2xl font-semibold">{{ totale_adempimenti }}</div>
+    </div>
+    <div class="rounded-md border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+        <div class="text-[11px] uppercase tracking-wider text-slate-500">Miei adempimenti come esecutore</div>
+        <div class="mt-1 text-2xl font-semibold">{{ miei_adempimenti|length }}</div>
+    </div>
+</div>
+
+<div class="rounded-md border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+    <div class="flex items-center justify-between border-b border-slate-200 px-3 py-2 text-sm dark:border-slate-800">
+        <span class="font-medium">I miei ultimi adempimenti</span>
+        <a href="{% url 'adempimenti:list' %}?esecutore={{ user.id }}" class="text-xs text-brand-600 hover:underline">Apri tutti →</a>
+    </div>
+    {% if miei_adempimenti %}
+    <table class="sh-table w-full">
+        <thead>
+            <tr class="text-left text-[11px] uppercase tracking-wider text-slate-500">
+                <th class="px-3">Cliente</th>
+                <th class="px-3">Tipo</th>
+                <th class="px-3">Anno fisc.</th>
+                <th class="px-3">Anno esec.</th>
+                <th class="px-3">Stato</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+            {% for a in miei_adempimenti %}
+            <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                <td class="px-3"><a class="hover:underline" href="{{ a.get_absolute_url }}">{{ a.anagrafica.denominazione }}</a></td>
+                <td class="px-3">{{ a.get_tipo_display }}</td>
+                <td class="px-3 tabular-nums">{{ a.anno_fiscale }}</td>
+                <td class="px-3 tabular-nums">{{ a.anno_esecuzione }}</td>
+                <td class="px-3">
+                    {% include "adempimenti/_stato_badge.html" with stato=a.stato %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="px-3 py-6 text-center text-sm text-slate-500">
+        Nessun adempimento assegnato a te come esecutore.
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}{{ adempimento.get_tipo_display }} {{ adempimento.anno_fiscale }} — {{ adempimento.anagrafica.denominazione }}{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+    <div class="text-[11px] uppercase tracking-wider text-slate-500">
+        <a href="{% url 'adempimenti:list' %}" class="hover:underline">Adempimenti</a> /
+    </div>
+    <h1 class="text-lg font-semibold">
+        {{ adempimento.get_tipo_display }} {{ adempimento.anno_fiscale }}
+        <span class="font-normal text-slate-500">—</span>
+        <a href="{{ adempimento.anagrafica.get_absolute_url }}" class="hover:underline">{{ adempimento.anagrafica.denominazione }}</a>
+    </h1>
+</div>
+
+<div class="grid grid-cols-1 gap-3 lg:grid-cols-3">
+    <div class="rounded-md border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+        <div class="mb-2 text-[11px] uppercase tracking-wider text-slate-500">Generale</div>
+        <dl class="grid grid-cols-3 gap-y-1 text-sm">
+            <dt class="col-span-1 text-slate-500">Anno fiscale</dt><dd class="col-span-2 tabular-nums">{{ adempimento.anno_fiscale }}</dd>
+            <dt class="col-span-1 text-slate-500">Anno esec.</dt><dd class="col-span-2 tabular-nums">{{ adempimento.anno_esecuzione }}</dd>
+            <dt class="col-span-1 text-slate-500">Esecutore</dt><dd class="col-span-2">{{ adempimento.responsabile|default:"—" }}</dd>
+            <dt class="col-span-1 text-slate-500">Stato</dt>
+            <dd class="col-span-2">{% include "adempimenti/_stato_badge.html" with stato=adempimento.stato %}</dd>
+        </dl>
+    </div>
+
+    <div class="rounded-md border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+        <div class="mb-2 text-[11px] uppercase tracking-wider text-slate-500">Referenti del cliente ({{ adempimento.anno_fiscale }})</div>
+        <div class="text-sm">
+            <div class="mb-2">
+                <div class="text-xs text-slate-500">Addetto contabilità</div>
+                {% for r in addetti %}
+                    <div>{{ r.utente }}{% if r.principale %} ★{% endif %}</div>
+                {% empty %}
+                    <div class="text-slate-400">Nessuno</div>
+                {% endfor %}
+            </div>
+            <div>
+                <div class="text-xs text-slate-500">Responsabile consulenza</div>
+                {% for r in consulenti %}
+                    <div>{{ r.utente }}{% if r.principale %} ★{% endif %}</div>
+                {% empty %}
+                    <div class="text-slate-400">Nessuno</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <div class="rounded-md border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+        <div class="mb-2 text-[11px] uppercase tracking-wider text-slate-500">Avanzamento</div>
+        {% if dettaglio %}
+        <dl class="grid grid-cols-3 gap-y-1 text-sm">
+            <dt class="col-span-1 text-slate-500">Chiusura bilancio</dt>
+            <dd class="col-span-2 tabular-nums">{{ dettaglio.data_chiusura_bilancio|date:"d/m/Y"|default:"—" }}</dd>
+            <dt class="col-span-1 text-slate-500">Compilazione</dt>
+            <dd class="col-span-2 tabular-nums">{{ dettaglio.data_compilazione|date:"d/m/Y"|default:"—" }}</dd>
+            <dt class="col-span-1 text-slate-500">Invio pratica</dt>
+            <dd class="col-span-2 tabular-nums">{{ dettaglio.data_invio_pratica|date:"d/m/Y"|default:"—" }}</dd>
+        </dl>
+        {% else %}
+        <div class="text-sm text-slate-500">Nessun dettaglio di tipo specifico.</div>
+        {% endif %}
+    </div>
+</div>
+
+{% if adempimento.note %}
+<div class="mt-4 rounded-md border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+    <div class="mb-1 text-[11px] uppercase tracking-wider text-slate-500">Note</div>
+    <div class="whitespace-pre-wrap text-sm">{{ adempimento.note }}</div>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,23 @@
+{% for c in clienti %}
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+    <td class="px-3 font-mono text-xs">{{ c.codice_interno }}</td>
+    <td class="px-3">
+        <a href="{{ c.get_absolute_url }}" class="font-medium hover:underline">{{ c.denominazione }}</a>
+    </td>
+    <td class="px-3">
+        <span class="inline-flex rounded bg-slate-100 px-1.5 text-[11px] font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-300">{{ c.tipo_soggetto }}</span>
+    </td>
+    <td class="px-3 font-mono text-xs">{{ c.codice_fiscale|default:"—" }}</td>
+    <td class="px-3 font-mono text-xs">{{ c.partita_iva|default:"—" }}</td>
+    <td class="px-3 text-xs">{{ c.get_regime_contabile_display|default:"—" }}</td>
+    <td class="px-3 text-xs">{{ c.get_periodicita_iva_display|default:"—" }}</td>
+    <td class="px-3">
+        {% if c.stato == 'attivo' %}<span class="sh-state sh-state-done">Attivo</span>
+        {% elif c.stato == 'sospeso' %}<span class="sh-state sh-state-wip">Sospeso</span>
+        {% else %}<span class="sh-state sh-state-idle">{{ c.get_stato_display }}</span>
+        {% endif %}
+    </td>
+</tr>
+{% empty %}
+<tr><td colspan="8" class="px-3 py-8 text-center text-sm text-slate-500">Nessun cliente trovato.</td></tr>
+{% endfor %}
