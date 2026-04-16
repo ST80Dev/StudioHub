@@ -44,8 +44,11 @@ services:
       db:
         condition: service_healthy
     ports:
-      # Esposto SOLO sul loopback dell'host; Caddy nativo fa reverse_proxy qui.
-      - "127.0.0.1:8100:8000"
+      # Esposto su tutte le interfacce dell'host (LAN inclusa) finché siamo
+      # in fase di sviluppo/test interno. Quando esporremo via Caddy in
+      # produzione pubblica, tornare a "127.0.0.1:8100:8000" per forzare
+      # il passaggio solo dal reverse proxy.
+      - "8100:8000"
     networks:
       - internal
 
