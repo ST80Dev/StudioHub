@@ -54,6 +54,13 @@ class Adempimento(models.Model):
     note = models.TextField(blank=True)
     is_deleted = models.BooleanField(default=False)
 
+    # Dati di test vs reali: cfr. ROADMAP.md — sezione "Policy dati demo vs reali"
+    is_demo = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="True per adempimenti creati dal seed di test.",
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
