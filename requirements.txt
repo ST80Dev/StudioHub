@@ -6,3 +6,6 @@ django-q2==1.7.4
 django-extensions==3.2.3
 whitenoise==6.8.2
 gunicorn==23.0.0
+# Seed dati demo (management command seed_demo). Non usare in production runtime.
+factory-boy==3.3.1
+Faker==30.8.2

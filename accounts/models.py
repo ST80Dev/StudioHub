@@ -53,6 +53,12 @@ class UtenteStudio(AbstractUser):
         AreaAziendale, blank=True, related_name="utenti"
     )
 
+    is_demo = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="True per utenti creati dal seed di test. Mai True per utenti reali.",
+    )
+
     class Meta:
         ordering = ("last_name", "first_name", "username")
         verbose_name = "Utente studio"
