@@ -6,6 +6,7 @@ app_name = "configurazione"
 
 urlpatterns = [
     path("", v.configurazione_home, name="home"),
+    path("matrice/", v.matrice, name="matrice"),
     path("tipi/", v.tipi_list, name="tipi_list"),
     path("tipi/nuovo/", v.tipo_create, name="tipo_create"),
     path("tipi/<int:pk>/", v.tipo_detail, name="tipo_detail"),
