@@ -1,17 +1,17 @@
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Exists, OuterRef, Q
 from django.shortcuts import get_object_or_404, render
 
-from anagrafica.models import RuoloReferenteStudio
+from anagrafica.models import AnagraficaReferenteStudio, RuoloReferenteStudio
 
-from .models import Adempimento, StatoBilancioUE, TipoAdempimento
+from .models import Adempimento, StatoAdempimento, TipoAdempimentoCatalogo
 
 
 @login_required
 def lista_adempimenti(request):
     qs = Adempimento.objects.filter(is_deleted=False).select_related(
-        "anagrafica", "responsabile"
+        "anagrafica", "responsabile", "tipo"
     )
 
     q = request.GET.get("q", "").strip()
@@ -21,35 +21,28 @@ def lista_adempimenti(request):
             | Q(anagrafica__codice_interno__icontains=q)
         )
 
-    tipo = request.GET.get("tipo", "")
-    if tipo in TipoAdempimento.values:
-        qs = qs.filter(tipo=tipo)
+    tipo_id = request.GET.get("tipo", "")
+    if tipo_id.isdigit():
+        qs = qs.filter(tipo_id=int(tipo_id))
 
     anno_fiscale = request.GET.get("anno_fiscale", "")
     if anno_fiscale.isdigit():
         qs = qs.filter(anno_fiscale=int(anno_fiscale))
 
-    anno_esecuzione = request.GET.get("anno_esecuzione", "")
-    if anno_esecuzione.isdigit():
-        qs = qs.filter(anno_esecuzione=int(anno_esecuzione))
+    stato = request.GET.get("stato", "")
+    if stato in StatoAdempimento.values:
+        qs = qs.filter(stato=stato)
 
     esecutore = request.GET.get("esecutore", "")
     if esecutore.isdigit():
         qs = qs.filter(responsabile_id=int(esecutore))
 
-    # Filtro per responsabile consulenza / addetto contabilità del cliente
-    # (opzione B: validi nell'anno fiscale dell'adempimento)
     referente_ruolo = request.GET.get("ref_ruolo", "")
     referente_utente = request.GET.get("ref_utente", "")
     if (
         referente_ruolo in RuoloReferenteStudio.values
         and referente_utente.isdigit()
     ):
-        # Correlated subquery a livello applicativo
-        from anagrafica.models import AnagraficaReferenteStudio
-        from django.db.models import Exists, OuterRef
-        from datetime import date
-
         sub = AnagraficaReferenteStudio.objects.filter(
             anagrafica=OuterRef("anagrafica"),
             utente_id=int(referente_utente),
@@ -61,7 +54,7 @@ def lista_adempimenti(request):
         )
         qs = qs.filter(Exists(sub))
 
-    qs = qs.order_by("-anno_esecuzione", "anagrafica__denominazione")
+    qs = qs.order_by("data_scadenza", "anagrafica__denominazione")
 
     paginator = Paginator(qs, 50)
     page = paginator.get_page(request.GET.get("page"))
@@ -70,13 +63,13 @@ def lista_adempimenti(request):
         "page": page,
         "adempimenti": page.object_list,
         "q": q,
-        "tipo": tipo,
+        "tipo_id": tipo_id,
         "anno_fiscale": anno_fiscale,
-        "anno_esecuzione": anno_esecuzione,
+        "stato": stato,
         "esecutore": esecutore,
-        "tipi": TipoAdempimento.choices,
+        "tipi": TipoAdempimentoCatalogo.objects.filter(attivo=True),
+        "stati": StatoAdempimento.choices,
         "ruoli": RuoloReferenteStudio.choices,
-        "stati_bilancio_ue": StatoBilancioUE.choices,
         "totale": paginator.count,
     }
     template = (
@@ -90,16 +83,17 @@ def lista_adempimenti(request):
 @login_required
 def dettaglio_adempimento(request, pk: int):
     adempimento = get_object_or_404(
-        Adempimento.objects.select_related("anagrafica", "responsabile"),
+        Adempimento.objects.select_related("anagrafica", "responsabile", "tipo"),
         pk=pk,
         is_deleted=False,
     )
+    steps = adempimento.steps_completati.select_related("step", "completato_da").order_by("step__ordine")
     return render(
         request,
         "adempimenti/detail.html",
         {
             "adempimento": adempimento,
-            "dettaglio": adempimento.dettaglio,
+            "steps": steps,
             "addetti": adempimento.addetti_contabilita_cliente,
             "consulenti": adempimento.responsabili_consulenza_cliente,
         },

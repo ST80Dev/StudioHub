@@ -2,17 +2,16 @@
 
 Ordine di cancellazione (rispetta i FK PROTECT):
 
-  1. AdempimentoBilancioUE (figlie 1:1) via cascade da Adempimento
-  2. Adempimento con is_demo=True
-  3. AnagraficaReferenteStudio via cascade da Anagrafica
-  4. AnagraficaLegame via cascade da Anagrafica
-  5. Anagrafica con is_demo=True
-  6. (opzionale, --include-users) UtenteStudio con is_demo=True
+  1. StepCompletato, ProgressioneContabilita/Log → cascade da Adempimento/Anagrafica
+  2. Adempimento con is_demo=True (o su anagrafiche demo)
+  3. AnagraficaReferenteStudio, AnagraficaLegame → cascade da Anagrafica
+  4. Anagrafica con is_demo=True
+  5. (opzionale, --include-users) UtenteStudio con is_demo=True
 
 Preserva SEMPRE:
   - Tutti gli utenti NON marcati demo (personale reale, admin, superuser)
-  - AreaAziendale (configurazione organizzativa)
-  - Tutte le future tabelle di configurazione elencate in ROADMAP.md
+  - AreaAziendale, TipoAdempimentoCatalogo, ScadenzaPeriodo, ChecklistStep,
+    RegolaApplicabilita (configurazione)
 """
 from __future__ import annotations
 

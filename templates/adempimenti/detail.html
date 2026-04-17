@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ adempimento.get_tipo_display }} {{ adempimento.anno_fiscale }} — {{ adempimento.anagrafica.denominazione }}{% endblock %}
+{% block title %}{{ adempimento.tipo.denominazione }} {{ adempimento.anno_fiscale }} — {{ adempimento.anagrafica.denominazione }}{% endblock %}
 
 {% block content %}
 <div class="mb-3">
@@ -7,7 +7,8 @@
         <a href="{% url 'adempimenti:list' %}" class="hover:underline">Adempimenti</a> /
     </div>
     <h1 class="text-lg font-semibold">
-        {{ adempimento.get_tipo_display }} {{ adempimento.anno_fiscale }}
+        {{ adempimento.tipo.denominazione }} {{ adempimento.anno_fiscale }}
+        {% if adempimento.periodo %}<span class="text-slate-400">P{{ adempimento.periodo }}</span>{% endif %}
         <span class="font-normal text-slate-500">—</span>
         <a href="{{ adempimento.anagrafica.get_absolute_url }}" class="hover:underline">{{ adempimento.anagrafica.denominazione }}</a>
     </h1>
@@ -18,7 +19,7 @@
         <div class="mb-2 text-[11px] uppercase tracking-wider text-slate-500">Generale</div>
         <dl class="grid grid-cols-3 gap-y-1 text-sm">
             <dt class="col-span-1 text-slate-500">Anno fiscale</dt><dd class="col-span-2 tabular-nums">{{ adempimento.anno_fiscale }}</dd>
-            <dt class="col-span-1 text-slate-500">Anno esec.</dt><dd class="col-span-2 tabular-nums">{{ adempimento.anno_esecuzione }}</dd>
+            <dt class="col-span-1 text-slate-500">Scadenza</dt><dd class="col-span-2 tabular-nums">{{ adempimento.data_scadenza|date:"d/m/Y"|default:"—" }}</dd>
             <dt class="col-span-1 text-slate-500">Esecutore</dt><dd class="col-span-2">{{ adempimento.responsabile|default:"—" }}</dd>
             <dt class="col-span-1 text-slate-500">Stato</dt>
             <dd class="col-span-2">{% include "adempimenti/_stato_badge.html" with stato=adempimento.stato %}</dd>
@@ -48,18 +49,24 @@
     </div>
 
     <div class="rounded-md border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
-        <div class="mb-2 text-[11px] uppercase tracking-wider text-slate-500">Avanzamento</div>
-        {% if dettaglio %}
-        <dl class="grid grid-cols-3 gap-y-1 text-sm">
-            <dt class="col-span-1 text-slate-500">Chiusura bilancio</dt>
-            <dd class="col-span-2 tabular-nums">{{ dettaglio.data_chiusura_bilancio|date:"d/m/Y"|default:"—" }}</dd>
-            <dt class="col-span-1 text-slate-500">Compilazione</dt>
-            <dd class="col-span-2 tabular-nums">{{ dettaglio.data_compilazione|date:"d/m/Y"|default:"—" }}</dd>
-            <dt class="col-span-1 text-slate-500">Invio pratica</dt>
-            <dd class="col-span-2 tabular-nums">{{ dettaglio.data_invio_pratica|date:"d/m/Y"|default:"—" }}</dd>
-        </dl>
+        <div class="mb-2 text-[11px] uppercase tracking-wider text-slate-500">Checklist</div>
+        {% if steps %}
+        <ul class="space-y-1 text-sm">
+            {% for sc in steps %}
+            <li class="flex items-center gap-2">
+                {% if sc.completato %}
+                    <span class="text-green-600">✓</span>
+                    <span>{{ sc.step.denominazione }}</span>
+                    <span class="text-xs text-slate-400">{{ sc.data_completamento|date:"d/m/Y" }}</span>
+                {% else %}
+                    <span class="text-slate-300">○</span>
+                    <span class="text-slate-500">{{ sc.step.denominazione }}</span>
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ul>
         {% else %}
-        <div class="text-sm text-slate-500">Nessun dettaglio di tipo specifico.</div>
+        <div class="text-sm text-slate-500">Nessuno step configurato per questo tipo.</div>
         {% endif %}
     </div>
 </div>

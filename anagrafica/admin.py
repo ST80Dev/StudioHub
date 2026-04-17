@@ -79,6 +79,19 @@ class AnagraficaAdmin(admin.ModelAdmin):
             "Fiscale operativo",
             {"fields": ("regime_contabile", "periodicita_iva")},
         ),
+        (
+            "Profilo fiscale arricchito",
+            {
+                "fields": (
+                    "contabilita",
+                    "peso_contabilita",
+                    "sostituto_imposta",
+                    "iscritto_cciaa",
+                    "data_fine_esercizio",
+                    "categoria_professione",
+                ),
+            },
+        ),
     )
 
 
