@@ -1,14 +1,11 @@
-{% comment %}
-Badge di stato per un adempimento (usa i valori di StatoBilancioUE).
-{% endcomment %}
-{% if stato == 'completato' %}
-    <span class="sh-state sh-state-done">Completato</span>
-{% elif stato == 'da_inviare' %}
-    <span class="sh-state sh-state-wip">Da inviare</span>
-{% elif stato == 'da_compilare' %}
-    <span class="sh-state sh-state-wip">Da compilare</span>
-{% elif stato == 'da_iniziare' %}
-    <span class="sh-state sh-state-todo">Da iniziare</span>
+{% if stato == 'inviato' %}
+    <span class="sh-state sh-state-done">Inviato</span>
+{% elif stato == 'controllato' %}
+    <span class="sh-state sh-state-review">Controllato</span>
+{% elif stato == 'in_corso' %}
+    <span class="sh-state sh-state-wip">In corso</span>
+{% elif stato == 'da_fare' %}
+    <span class="sh-state sh-state-todo">Da fare</span>
 {% else %}
     <span class="sh-state sh-state-idle">{{ stato }}</span>
 {% endif %}

@@ -1,12 +1,50 @@
 from django.contrib import admin
 
-from .models import Adempimento, AdempimentoBilancioUE
+from .models import (
+    Adempimento,
+    ChecklistStep,
+    RegolaApplicabilita,
+    ScadenzaPeriodo,
+    StepCompletato,
+    TipoAdempimentoCatalogo,
+)
 
 
-class BilancioUEInline(admin.StackedInline):
-    model = AdempimentoBilancioUE
+# ---------------------------------------------------------------------------
+# Catalogo tipi
+# ---------------------------------------------------------------------------
+
+class ScadenzaPeriodoInline(admin.TabularInline):
+    model = ScadenzaPeriodo
+    extra = 1
+
+
+class ChecklistStepInline(admin.TabularInline):
+    model = ChecklistStep
+    extra = 1
+
+
+class RegolaApplicabilitaInline(admin.TabularInline):
+    model = RegolaApplicabilita
+    extra = 1
+
+
+@admin.register(TipoAdempimentoCatalogo)
+class TipoAdempimentoCatalogoAdmin(admin.ModelAdmin):
+    list_display = ("codice", "denominazione", "periodicita", "attivo", "ordine")
+    list_filter = ("periodicita", "attivo")
+    search_fields = ("codice", "denominazione")
+    inlines = [ScadenzaPeriodoInline, ChecklistStepInline, RegolaApplicabilitaInline]
+
+
+# ---------------------------------------------------------------------------
+# Adempimento
+# ---------------------------------------------------------------------------
+
+class StepCompletatoInline(admin.TabularInline):
+    model = StepCompletato
     extra = 0
-    can_delete = False
+    readonly_fields = ("step",)
 
 
 @admin.register(Adempimento)
@@ -15,25 +53,15 @@ class AdempimentoAdmin(admin.ModelAdmin):
         "anagrafica",
         "tipo",
         "anno_fiscale",
-        "anno_esecuzione",
-        "responsabile",
+        "periodo",
+        "data_scadenza",
         "stato",
+        "responsabile",
     )
-    list_filter = ("tipo", "anno_fiscale", "anno_esecuzione")
+    list_filter = ("tipo", "anno_fiscale", "stato")
     search_fields = (
         "anagrafica__denominazione",
         "anagrafica__codice_interno",
     )
-    autocomplete_fields = ("anagrafica", "responsabile")
-    inlines = [BilancioUEInline]
-
-
-@admin.register(AdempimentoBilancioUE)
-class BilancioUEAdmin(admin.ModelAdmin):
-    list_display = (
-        "adempimento",
-        "data_chiusura_bilancio",
-        "data_compilazione",
-        "data_invio_pratica",
-        "stato_label",
-    )
+    autocomplete_fields = ("anagrafica", "responsabile", "tipo")
+    inlines = [StepCompletatoInline]

@@ -18,6 +18,7 @@ from .models import (
     Anagrafica,
     AnagraficaLegame,
     AnagraficaReferenteStudio,
+    GestioneContabilita,
     PeriodicitaIVA,
     RegimeContabile,
     RuoloReferenteStudio,
@@ -111,6 +112,18 @@ class AnagraficaPFFactory(DjangoModelFactory):
             else random.choice([PeriodicitaIVA.TRIMESTRALE, PeriodicitaIVA.MENSILE])
         )
     )
+    contabilita = factory.LazyFunction(
+        lambda: random.choice([GestioneContabilita.INTERNA, GestioneContabilita.ESTERNA])
+    )
+    peso_contabilita = factory.LazyAttribute(
+        lambda o: random.randint(1, 5) if o.contabilita == GestioneContabilita.INTERNA else 0
+    )
+    sostituto_imposta = factory.LazyAttribute(
+        lambda o: o.tipo_soggetto != TipoSoggetto.PF and random.random() < 0.3
+    )
+    iscritto_cciaa = factory.LazyAttribute(
+        lambda o: o.tipo_soggetto not in {TipoSoggetto.PF}
+    )
     data_inizio_mandato = factory.LazyFunction(
         lambda: date(random.randint(2015, 2024), random.randint(1, 12), 1)
     )
@@ -142,6 +155,17 @@ class AnagraficaEntitaFactory(DjangoModelFactory):
     periodicita_iva = factory.LazyFunction(
         lambda: random.choice([PeriodicitaIVA.MENSILE, PeriodicitaIVA.TRIMESTRALE])
     )
+    contabilita = factory.LazyFunction(
+        lambda: random.choices(
+            [GestioneContabilita.INTERNA, GestioneContabilita.ESTERNA],
+            weights=[70, 30], k=1
+        )[0]
+    )
+    peso_contabilita = factory.LazyAttribute(
+        lambda o: random.randint(3, 10) if o.contabilita == GestioneContabilita.INTERNA else 0
+    )
+    sostituto_imposta = factory.LazyFunction(lambda: random.random() < 0.5)
+    iscritto_cciaa = True
     data_inizio_mandato = factory.LazyFunction(
         lambda: date(random.randint(2010, 2023), random.randint(1, 12), 1)
     )

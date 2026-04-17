@@ -6,22 +6,14 @@ in modo chirurgico con `flush_demo` senza toccare i dati reali.
 
 Esempi d'uso:
 
-    # Scenario tipico: riusa utenti già presenti, crea 30 clienti e adempimenti.
     python manage.py seed_demo
-
-    # Crea anche 6 utenti demo (oltre a usare quelli reali se ci sono).
     python manage.py seed_demo --create-users
-
-    # Ripartenza pulita: cancella prima i dati demo esistenti.
     python manage.py seed_demo --reset-demo
-
-    # Parametri di volume.
-    python manage.py seed_demo --clienti 50 --adempimenti-per-cliente 3
+    python manage.py seed_demo --clienti 50
 """
 from __future__ import annotations
 
 import random
-from datetime import date
 
 import factory
 from django.contrib.auth import get_user_model
@@ -29,7 +21,8 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 
 from accounts.factories import UtenteDemoFactory
-from adempimenti.factories import AdempimentoBilancioUEFactory
+from adempimenti.factories import crea_adempimento_demo
+from adempimenti.models import Adempimento, TipoAdempimentoCatalogo, tipi_applicabili
 from anagrafica.factories import (
     AnagraficaEntitaFactory,
     AnagraficaPFFactory,
@@ -51,49 +44,31 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument(
-            "--clienti",
-            type=int,
-            default=30,
+            "--clienti", type=int, default=30,
             help="Numero di anagrafiche demo da creare (default: 30).",
         )
         parser.add_argument(
-            "--adempimenti-per-cliente",
-            type=int,
-            default=2,
-            help="Adempimenti medi per cliente entità (default: 2).",
-        )
-        parser.add_argument(
-            "--anno-inizio",
-            type=int,
-            default=2024,
+            "--anno-inizio", type=int, default=2024,
             help="Primo anno fiscale da coprire (default: 2024).",
         )
         parser.add_argument(
-            "--anno-fine",
-            type=int,
-            default=2025,
+            "--anno-fine", type=int, default=2025,
             help="Ultimo anno fiscale da coprire (default: 2025).",
         )
         parser.add_argument(
-            "--create-users",
-            action="store_true",
+            "--create-users", action="store_true",
             help="Crea utenti demo oltre a riusare quelli esistenti.",
         )
         parser.add_argument(
-            "--num-users",
-            type=int,
-            default=6,
+            "--num-users", type=int, default=6,
             help="Utenti demo da creare se --create-users (default: 6).",
         )
         parser.add_argument(
-            "--seed",
-            type=int,
-            default=42,
+            "--seed", type=int, default=42,
             help="Seed deterministico per la generazione (default: 42).",
         )
         parser.add_argument(
-            "--reset-demo",
-            action="store_true",
+            "--reset-demo", action="store_true",
             help="Cancella i dati demo esistenti prima di popolare.",
         )
 
@@ -104,7 +79,6 @@ class Command(BaseCommand):
         if opts["reset_demo"]:
             self.stdout.write(self.style.WARNING("Reset dati demo in corso..."))
             from django.core.management import call_command
-
             call_command("flush_demo", "--yes", "--include-users")
 
         with transaction.atomic():
@@ -112,22 +86,17 @@ class Command(BaseCommand):
                 create_new=opts["create_users"], n_new=opts["num_users"]
             )
             if not utenti:
-                self.stdout.write(
-                    self.style.ERROR(
-                        "Nessun utente disponibile. Rilancia con --create-users "
-                        "oppure crea prima utenti reali da admin."
-                    )
-                )
+                self.stdout.write(self.style.ERROR(
+                    "Nessun utente disponibile. Rilancia con --create-users "
+                    "oppure crea prima utenti reali da admin."
+                ))
                 return
 
-            clienti = self._create_clienti(
-                n=opts["clienti"], utenti=utenti
-            )
+            clienti = self._create_clienti(n=opts["clienti"], utenti=utenti)
             self._create_legami(clienti)
             self._create_adempimenti(
                 clienti=clienti,
                 utenti=utenti,
-                media_per_cliente=opts["adempimenti_per_cliente"],
                 anno_inizio=opts["anno_inizio"],
                 anno_fine=opts["anno_fine"],
             )
@@ -135,14 +104,7 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS("Seed demo completato."))
         self._print_riepilogo()
 
-    # ------------------------------------------------------------------ users
-
     def _ensure_users(self, *, create_new: bool, n_new: int):
-        """Restituisce la lista di utenti usabili come referenti/responsabili.
-
-        Riusa sempre gli utenti esistenti (demo o reali, non superuser).
-        Se richiesto, aggiunge nuovi utenti demo.
-        """
         esistenti = list(
             User.objects.filter(is_active=True).exclude(is_superuser=True)
         )
@@ -155,14 +117,11 @@ class Command(BaseCommand):
         self.stdout.write(f"Utenti disponibili per il seed: {len(utenti)}.")
         return utenti
 
-    # --------------------------------------------------------------- clienti
-
     def _create_clienti(self, *, n: int, utenti):
         clienti: list[Anagrafica] = []
         start_idx = self._next_codice_interno_idx()
         for i in range(n):
             codice = _fake_codice_interno(start_idx + i)
-            # Mix: ~60% entità, ~40% persone fisiche.
             if random.random() < 0.6:
                 cli = AnagraficaEntitaFactory(codice_interno=codice)
             else:
@@ -173,7 +132,6 @@ class Command(BaseCommand):
         return clienti
 
     def _next_codice_interno_idx(self) -> int:
-        """Prossimo indice libero per il prefisso DEMO-NNNNN."""
         existing = Anagrafica.objects.filter(
             codice_interno__startswith="DEMO-"
         ).values_list("codice_interno", flat=True)
@@ -187,7 +145,6 @@ class Command(BaseCommand):
         return max_idx + 1
 
     def _assegna_referenti(self, cli: Anagrafica, utenti):
-        """Assegna un addetto contabilità e un responsabile consulenza."""
         for ruolo in (
             RuoloReferenteStudio.ADDETTO_CONTABILITA,
             RuoloReferenteStudio.RESPONSABILE_CONSULENZA,
@@ -200,12 +157,7 @@ class Command(BaseCommand):
                 principale=True,
             )
 
-    # ---------------------------------------------------------------- legami
-
     def _create_legami(self, clienti):
-        """Crea legami PF↔entità plausibili: per ciascuna entità aggancia
-        1-2 PF come socio/amministratore/legale rappr.
-        """
         entita = [c for c in clienti if c.tipo_soggetto in TIPI_ENTITA]
         pf = [c for c in clienti if c.tipo_soggetto not in TIPI_ENTITA]
         if not pf:
@@ -215,53 +167,37 @@ class Command(BaseCommand):
             k = random.choice([1, 1, 2])
             for persona in random.sample(pf, min(k, len(pf))):
                 try:
-                    LegameFactory(
-                        anagrafica=ent,
-                        anagrafica_collegata=persona,
-                    )
+                    LegameFactory(anagrafica=ent, anagrafica_collegata=persona)
                     created += 1
-                except Exception:  # vincolo unique → skip
+                except Exception:
                     continue
         self.stdout.write(f"Creati {created} legami anagrafici.")
 
-    # ----------------------------------------------------------- adempimenti
-
-    def _create_adempimenti(
-        self,
-        *,
-        clienti,
-        utenti,
-        media_per_cliente: int,
-        anno_inizio: int,
-        anno_fine: int,
-    ):
-        """Solo le SRL/SPA hanno Bilancio UE; gli altri tipi avranno adempimenti
-        specifici quando saranno implementati (Fase 3 della roadmap).
-        """
-        from anagrafica.models import TIPI_BILANCIO_UE
+    def _create_adempimenti(self, *, clienti, utenti, anno_inizio, anno_fine):
+        tipi_attivi = TipoAdempimentoCatalogo.objects.filter(attivo=True)
+        if not tipi_attivi.exists():
+            self.stdout.write(self.style.WARNING(
+                "Nessun tipo adempimento nel catalogo. "
+                "Configura prima i tipi da admin o seed_catalogo."
+            ))
+            return
 
         count = 0
         for cli in clienti:
-            if cli.tipo_soggetto not in TIPI_BILANCIO_UE:
-                continue
-            anni = list(range(anno_inizio, anno_fine + 1))
-            # Media targhettata: 1 riga per anno coperto, clamped a media_per_cliente.
-            n = min(len(anni), max(1, media_per_cliente))
-            for anno_fiscale in random.sample(anni, n):
-                AdempimentoBilancioUEFactory(
-                    anagrafica=cli,
-                    anno_fiscale=anno_fiscale,
-                    anno_esecuzione=anno_fiscale + 1,
-                    responsabile=random.choice(utenti),
-                )
-                count += 1
-        self.stdout.write(f"Creati {count} adempimenti Bilancio UE.")
-
-    # ------------------------------------------------------------- riepilogo
+            tipi_cli = tipi_applicabili(cli)
+            for tipo in tipi_cli:
+                for anno in range(anno_inizio, anno_fine + 1):
+                    responsabile = random.choice(utenti)
+                    creati = crea_adempimento_demo(
+                        anagrafica=cli,
+                        tipo=tipo,
+                        anno_fiscale=anno,
+                        responsabile=responsabile,
+                    )
+                    count += len(creati)
+        self.stdout.write(f"Creati {count} adempimenti demo.")
 
     def _print_riepilogo(self):
-        from adempimenti.models import Adempimento
-
         self.stdout.write("")
         self.stdout.write(self.style.MIGRATE_HEADING("Stato attuale del DB:"))
         self.stdout.write(
@@ -275,4 +211,8 @@ class Command(BaseCommand):
         self.stdout.write(
             f"  Adempimenti totali:     {Adempimento.objects.count()} "
             f"(di cui demo: {Adempimento.objects.filter(is_demo=True).count()})"
+        )
+        self.stdout.write(
+            f"  Tipi adempimento attivi: "
+            f"{TipoAdempimentoCatalogo.objects.filter(attivo=True).count()}"
         )

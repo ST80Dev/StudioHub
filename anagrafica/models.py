@@ -53,6 +53,11 @@ class PeriodicitaIVA(models.TextChoices):
     NON_SOGGETTO = "non_soggetto", "Non soggetto"
 
 
+class GestioneContabilita(models.TextChoices):
+    INTERNA = "interna", "Interna (tenuta dallo studio)"
+    ESTERNA = "esterna", "Esterna"
+
+
 class Anagrafica(models.Model):
     """Anagrafica unica del cliente (PF / PG / Ente), discriminata da `tipo_soggetto`.
 
@@ -97,6 +102,38 @@ class Anagrafica(models.Model):
     )
     periodicita_iva = models.CharField(
         max_length=20, choices=PeriodicitaIVA.choices, blank=True
+    )
+
+    # Profilo fiscale arricchito (usato dal motore regole per derivare
+    # quali adempimenti competono al cliente)
+    contabilita = models.CharField(
+        max_length=10,
+        choices=GestioneContabilita.choices,
+        default=GestioneContabilita.ESTERNA,
+        help_text="Interna = tenuta dallo studio. Esterna = tenuta dal cliente o da terzi.",
+    )
+    peso_contabilita = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Indice di peso per il calcolo dell'aggiornamento ponderato. "
+            "0 = non considerato. Range consigliato 1-10."
+        ),
+    )
+    sostituto_imposta = models.BooleanField(
+        default=False,
+        help_text="Se True, al cliente competono CU e 770.",
+    )
+    iscritto_cciaa = models.BooleanField(
+        default=False,
+        help_text="Iscritto alla Camera di Commercio.",
+    )
+    data_fine_esercizio = models.CharField(
+        max_length=5, default="12-31",
+        help_text="Formato MM-DD. Default 31 dicembre (esercizio solare).",
+    )
+    categoria_professione = models.CharField(
+        max_length=60, blank=True,
+        help_text="Es: 'sanitaria'. Usato per regole tipo STS.",
     )
 
     # Specifici PF (valorizzati solo se tipo in PF/PROFEX/DI)
@@ -234,4 +271,87 @@ class AnagraficaLegame(models.Model):
         return (
             f"{self.anagrafica} → {self.anagrafica_collegata} "
             f"({self.get_tipo_legame_display()})"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Progressione contabilità mensile
+# ---------------------------------------------------------------------------
+
+class ProgressioneContabilita(models.Model):
+    """Stato corrente della registrazione contabile mensile per cliente/anno.
+
+    Solo clienti con contabilita = INTERNA.
+    """
+
+    anagrafica = models.ForeignKey(
+        Anagrafica, on_delete=models.CASCADE, related_name="progressione_contabilita"
+    )
+    anno = models.IntegerField()
+    mese_ultimo_registrato = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="0 = nessun mese registrato, 1-12 = ultimo mese completato.",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        verbose_name = "Progressione contabilità"
+        verbose_name_plural = "Progressioni contabilità"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["anagrafica", "anno"],
+                name="uniq_progressione_cliente_anno",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.anagrafica} — {self.anno}: mese {self.mese_ultimo_registrato}/12"
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        ProgressioneContabilitaLog.objects.create(
+            anagrafica=self.anagrafica,
+            anno=self.anno,
+            mese_ultimo_registrato=self.mese_ultimo_registrato,
+            utente=self.updated_by,
+        )
+
+
+class ProgressioneContabilitaLog(models.Model):
+    """Log append-only per domande retrospettive.
+
+    Ogni save di ProgressioneContabilita scrive una riga qui.
+    """
+
+    anagrafica = models.ForeignKey(
+        Anagrafica, on_delete=models.CASCADE, related_name="progressione_log"
+    )
+    anno = models.IntegerField()
+    mese_ultimo_registrato = models.PositiveSmallIntegerField()
+    rilevato_il = models.DateTimeField(auto_now_add=True)
+    utente = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        ordering = ("-rilevato_il",)
+        verbose_name = "Log progressione contabilità"
+        verbose_name_plural = "Log progressioni contabilità"
+        indexes = [
+            models.Index(fields=["anagrafica", "anno", "-rilevato_il"]),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"{self.anagrafica} — {self.anno}: "
+            f"mese {self.mese_ultimo_registrato} al {self.rilevato_il}"
         )
