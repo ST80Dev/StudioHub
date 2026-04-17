@@ -33,6 +33,22 @@ class TipoAdempimentoCatalogo(models.Model):
     )
     ordine = models.PositiveSmallIntegerField(default=0)
 
+    # Scadenza calcolata da un evento variabile sul singolo adempimento
+    # (es. Bilancio UE: "30 giorni dalla data di approvazione assemblea").
+    # Se entrambi questi campi sono valorizzati il tipo usa la modalità
+    # "evento + offset" e le righe ScadenzaPeriodo vengono ignorate.
+    etichetta_data_evento = models.CharField(
+        max_length=100, blank=True,
+        help_text=(
+            "Nome dell'evento di riferimento (es. 'Data assemblea approvazione "
+            "bilancio'). Lasciare vuoto se la scadenza è una data fissa."
+        ),
+    )
+    giorni_offset_da_evento = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        help_text="Giorni dopo l'evento entro cui scade l'adempimento.",
+    )
+
     class Meta:
         ordering = ("ordine", "denominazione")
         verbose_name = "Tipo adempimento"
@@ -40,6 +56,10 @@ class TipoAdempimentoCatalogo(models.Model):
 
     def __str__(self) -> str:
         return self.denominazione
+
+    @property
+    def usa_evento_variabile(self) -> bool:
+        return bool(self.etichetta_data_evento) and self.giorni_offset_da_evento is not None
 
 
 class ScadenzaPeriodo(models.Model):
@@ -226,9 +246,19 @@ class Adempimento(models.Model):
         null=True, blank=True,
         help_text="Null per annuale. 1-4 per trimestrale, 1-12 per mensile.",
     )
+    data_evento_riferimento = models.DateField(
+        null=True, blank=True,
+        help_text=(
+            "Data dell'evento di riferimento (es. data assemblea approvazione "
+            "bilancio). Usata solo per tipi con scadenza a offset da evento."
+        ),
+    )
     data_scadenza = models.DateField(
         null=True, blank=True,
-        help_text="Calcolata da ScadenzaPeriodo, sovrascrivibile dall'utente.",
+        help_text=(
+            "Calcolata automaticamente (ScadenzaPeriodo o data_evento + offset), "
+            "sovrascrivibile dall'utente."
+        ),
     )
     stato = models.CharField(
         max_length=15,
@@ -312,6 +342,27 @@ class Adempimento(models.Model):
         if self.data_scadenza and self.stato != StatoAdempimento.INVIATO:
             return date.today() > self.data_scadenza
         return False
+
+    def calcola_data_scadenza(self):
+        """Ritorna la data scadenza derivata dal tipo. Non persiste.
+
+        - Se il tipo usa evento + offset: data_evento_riferimento + giorni_offset.
+          Se l'evento non è ancora valorizzato ritorna None.
+        - Altrimenti cerca la ScadenzaPeriodo corrispondente al periodo.
+        """
+        from datetime import timedelta
+
+        if self.tipo.usa_evento_variabile:
+            if not self.data_evento_riferimento:
+                return None
+            return self.data_evento_riferimento + timedelta(
+                days=self.tipo.giorni_offset_da_evento
+            )
+
+        scadenza = self.tipo.scadenze.filter(periodo=self.periodo or 1).first()
+        if not scadenza:
+            return None
+        return scadenza.calcola_data_scadenza(self.anno_fiscale)
 
 
 class StepCompletato(models.Model):

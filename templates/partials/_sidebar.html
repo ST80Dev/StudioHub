@@ -32,6 +32,11 @@
         </span>
         {% if user.is_staff %}
         <div class="mt-6 px-4 text-[11px] uppercase tracking-wider text-slate-400">Amministrazione</div>
+        <a href="{% url 'configurazione:tipi_list' %}"
+           class="flex items-center gap-2 px-4 py-2 hover:bg-slate-100 dark:hover:bg-slate-800
+                  {% if '/configurazione/' in path %}bg-slate-100 font-medium text-brand-700 dark:bg-slate-800 dark:text-brand-500{% endif %}">
+            <span aria-hidden="true">🛠️</span> Configurazione
+        </a>
         <a href="/admin/"
            class="flex items-center gap-2 px-4 py-2 hover:bg-slate-100 dark:hover:bg-slate-800">
             <span aria-hidden="true">⚙️</span> Admin Django

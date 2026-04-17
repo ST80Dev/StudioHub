@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Tipi adempimento — Configurazione{% endblock %}
+
+{% block content %}
+{% include "configurazione/_subnav.html" with sub_active="tipi" %}
+{% include "configurazione/_messages.html" %}
+
+<div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+    <div>
+        <h1 class="text-lg font-semibold">Tipi adempimento</h1>
+        <p class="text-xs text-slate-500">
+            Catalogo dei tipi (Bilancio UE, LIPE, F24…). Ogni tipo ha le sue
+            scadenze, checklist e regole di applicabilità.
+            <span class="ml-1 text-slate-400">{{ totale }} registrati</span>
+        </p>
+    </div>
+    <a href="{% url 'configurazione:tipo_create' %}"
+       class="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
+        + Nuovo tipo
+    </a>
+</div>
+
+<div class="overflow-auto rounded-md border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+    <table class="sh-table w-full">
+        <thead>
+            <tr class="text-left text-[11px] uppercase tracking-wider text-slate-500">
+                <th class="px-3">Denominazione</th>
+                <th class="px-3">Codice</th>
+                <th class="px-3">Periodicità</th>
+                <th class="px-3">Scadenza</th>
+                <th class="px-3">Ordine</th>
+                <th class="px-3">Attivo</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+            {% for t in tipi %}
+            <tr class="hover:bg-slate-50 dark:hover:bg-slate-800">
+                <td class="px-3 py-2">
+                    <a href="{% url 'configurazione:tipo_detail' t.pk %}" class="font-medium text-brand-700 hover:underline dark:text-brand-500">
+                        {{ t.denominazione }}
+                    </a>
+                </td>
+                <td class="px-3 py-2 font-mono text-xs text-slate-500">{{ t.codice }}</td>
+                <td class="px-3 py-2 text-sm">{{ t.get_periodicita_display }}</td>
+                <td class="px-3 py-2 text-xs text-slate-500">
+                    {% if t.usa_evento_variabile %}
+                        Evento + {{ t.giorni_offset_da_evento }} gg
+                    {% else %}
+                        {{ t.scadenze.count }} data/e fissa/e
+                    {% endif %}
+                </td>
+                <td class="px-3 py-2 tabular-nums text-sm">{{ t.ordine }}</td>
+                <td class="px-3 py-2">
+                    {% if t.attivo %}
+                        <span class="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-medium text-green-800 dark:bg-green-900 dark:text-green-200">Sì</span>
+                    {% else %}
+                        <span class="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400">No</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="6" class="px-3 py-8 text-center text-sm text-slate-500">
+                Nessun tipo adempimento configurato. Crea il primo con "Nuovo tipo".
+            </td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

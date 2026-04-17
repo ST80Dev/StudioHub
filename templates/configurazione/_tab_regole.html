@@ -1,0 +1,95 @@
+<p class="mb-3 text-xs text-slate-500 max-w-3xl">
+    Le regole definiscono a quali clienti è applicabile questo tipo di adempimento
+    in base al loro profilo fiscale. <strong>Tutte le regole attive</strong> devono
+    essere soddisfatte (AND). Un tipo senza regole non viene proposto automaticamente
+    a nessun cliente.
+</p>
+
+<div class="grid grid-cols-1 gap-4 lg:grid-cols-5">
+    <div class="lg:col-span-3">
+        <div class="overflow-auto rounded-md border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+            <table class="sh-table w-full">
+                <thead>
+                    <tr class="text-left text-[11px] uppercase tracking-wider text-slate-500">
+                        <th class="px-3 w-16">Ord.</th>
+                        <th class="px-3">Campo</th>
+                        <th class="px-3">Condizione</th>
+                        <th class="px-3">Valore</th>
+                        <th class="px-3">Attiva</th>
+                        <th class="px-3"></th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+                    {% for r in regole %}
+                    <tr>
+                        <td class="px-3 py-2 tabular-nums text-sm text-slate-500">{{ r.ordine }}</td>
+                        <td class="px-3 py-2 text-sm">{{ r.get_campo_condizione_display }}</td>
+                        <td class="px-3 py-2 text-sm">{{ r.get_operatore_display }}</td>
+                        <td class="px-3 py-2 text-sm font-mono text-xs">{{ r.valore|default:"—" }}</td>
+                        <td class="px-3 py-2">
+                            {% if r.attiva %}
+                                <span class="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-medium text-green-800 dark:bg-green-900 dark:text-green-200">Sì</span>
+                            {% else %}
+                                <span class="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400">No</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-3 py-2 text-right">
+                            <form method="post" action="{% url 'configurazione:regola_delete' tipo.pk r.pk %}"
+                                  onsubmit="return confirm('Rimuovere questa regola?');">
+                                {% csrf_token %}
+                                <button type="submit" class="text-xs text-red-600 hover:underline">Elimina</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="6" class="px-3 py-6 text-center text-sm text-slate-500">
+                        Nessuna regola. Aggiungi la prima dal modulo a destra.
+                    </td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="lg:col-span-2">
+        <form method="post" action="{% url 'configurazione:regola_create' tipo.pk %}"
+              x-data="{ op: '{{ nuova_regola_form.operatore.value|default_if_none:'' }}' }"
+              class="space-y-2 rounded-md border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+            {% csrf_token %}
+            <div class="mb-1 text-sm font-medium">Nuova regola</div>
+            {% include "configurazione/_field.html" with field=nuova_regola_form.campo_condizione compact=True %}
+
+            {# Operatore: binding Alpine per mostrare/nascondere il valore #}
+            <div class="mb-2">
+                <label for="{{ nuova_regola_form.operatore.id_for_label }}" class="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                    {{ nuova_regola_form.operatore.label }}
+                </label>
+                <select name="{{ nuova_regola_form.operatore.html_name }}" id="{{ nuova_regola_form.operatore.id_for_label }}"
+                        x-model="op"
+                        class="w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-800">
+                    {% for val, lbl in nuova_regola_form.operatore.field.choices %}
+                    <option value="{{ val }}">{{ lbl }}</option>
+                    {% endfor %}
+                </select>
+                <p class="mt-1 text-[11px] text-slate-500">{{ nuova_regola_form.operatore.help_text }}</p>
+            </div>
+
+            <div x-show="op === 'uguale' || op === 'in_lista'" x-transition x-cloak>
+                {% include "configurazione/_field.html" with field=nuova_regola_form.valore compact=True %}
+            </div>
+            <div x-show="op === 'vero' || op === 'falso'" x-cloak
+                 class="mb-2 text-[11px] text-slate-500">
+                Per operatori Vero/Falso il campo "Valore" non serve.
+            </div>
+
+            {% include "configurazione/_field.html" with field=nuova_regola_form.ordine compact=True %}
+            {% include "configurazione/_field.html" with field=nuova_regola_form.attiva compact=True %}
+
+            <button type="submit" class="mt-2 rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
+                Aggiungi
+            </button>
+        </form>
+    </div>
+</div>
+
+<style>[x-cloak] { display: none !important; }</style>
