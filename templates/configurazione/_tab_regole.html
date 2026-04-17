@@ -1,8 +1,12 @@
-<p class="mb-3 text-xs text-slate-500 max-w-3xl">
+<p class="mb-3 max-w-3xl text-xs text-slate-500">
     Le regole definiscono a quali clienti è applicabile questo tipo di adempimento
     in base al loro profilo fiscale. <strong>Tutte le regole attive</strong> devono
     essere soddisfatte (AND). Un tipo senza regole non viene proposto automaticamente
     a nessun cliente.
+    <a href="{% url 'configurazione:matrice' %}" class="ml-1 text-brand-700 hover:underline dark:text-brand-500">
+        Apri la matrice profili → adempimenti
+    </a>
+    per vedere subito l'effetto delle regole su clienti tipici.
 </p>
 
 <div class="grid grid-cols-1 gap-4 lg:grid-cols-5">
@@ -52,43 +56,147 @@
     </div>
 
     <div class="lg:col-span-2">
-        <form method="post" action="{% url 'configurazione:regola_create' tipo.pk %}"
-              x-data="{ op: '{{ nuova_regola_form.operatore.value|default_if_none:'' }}' }"
-              class="space-y-2 rounded-md border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-            {% csrf_token %}
-            <div class="mb-1 text-sm font-medium">Nuova regola</div>
-            {% include "configurazione/_field.html" with field=nuova_regola_form.campo_condizione compact=True %}
+        {# JSON con metadati dei campi: kind + valori validi. Letto da Alpine. #}
+        {{ campi_info_json|json_script:"campi-info-data" }}
 
-            {# Operatore: binding Alpine per mostrare/nascondere il valore #}
-            <div class="mb-2">
-                <label for="{{ nuova_regola_form.operatore.id_for_label }}" class="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
-                    {{ nuova_regola_form.operatore.label }}
-                </label>
-                <select name="{{ nuova_regola_form.operatore.html_name }}" id="{{ nuova_regola_form.operatore.id_for_label }}"
-                        x-model="op"
+        <form method="post" action="{% url 'configurazione:regola_create' tipo.pk %}"
+              x-data="regolaForm()"
+              class="space-y-3 rounded-md border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+            {% csrf_token %}
+            <div class="text-sm font-medium">Nuova regola</div>
+
+            {# Campo del cliente #}
+            <div>
+                <label class="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Campo del cliente</label>
+                <select name="campo_condizione" x-model="campo"
                         class="w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-800">
-                    {% for val, lbl in nuova_regola_form.operatore.field.choices %}
-                    <option value="{{ val }}">{{ lbl }}</option>
+                    {% for k, info in campi_info.items %}
+                    <option value="{{ k }}">{{ info.label }}</option>
                     {% endfor %}
                 </select>
-                <p class="mt-1 text-[11px] text-slate-500">{{ nuova_regola_form.operatore.help_text }}</p>
             </div>
 
-            <div x-show="op === 'uguale' || op === 'in_lista'" x-transition x-cloak>
-                {% include "configurazione/_field.html" with field=nuova_regola_form.valore compact=True %}
-            </div>
-            <div x-show="op === 'vero' || op === 'falso'" x-cloak
-                 class="mb-2 text-[11px] text-slate-500">
-                Per operatori Vero/Falso il campo "Valore" non serve.
+            {# Condizione (operatore), filtrata in base al kind del campo #}
+            <div>
+                <label class="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Condizione</label>
+                <select name="operatore" x-model="op"
+                        class="w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-800">
+                    <template x-if="!isBool">
+                        <option value="uguale">Uguale a</option>
+                    </template>
+                    <template x-if="!isBool">
+                        <option value="in_lista">In lista (uno qualsiasi tra…)</option>
+                    </template>
+                    <template x-if="isBool">
+                        <option value="vero">Vero (sì)</option>
+                    </template>
+                    <template x-if="isBool">
+                        <option value="falso">Falso (no)</option>
+                    </template>
+                </select>
+                <p class="mt-1 text-[11px] text-slate-500" x-show="isBool">
+                    Per i campi Sì/No basta scegliere se la condizione è Vero o Falso.
+                </p>
             </div>
 
-            {% include "configurazione/_field.html" with field=nuova_regola_form.ordine compact=True %}
-            {% include "configurazione/_field.html" with field=nuova_regola_form.attiva compact=True %}
+            {# Widget VALORE — adattivo. Tutti i widget aggiornano `valore` (hidden). #}
+
+            {# enum + uguale: dropdown singolo #}
+            <div x-show="isEnum && op === 'uguale'" x-cloak>
+                <label class="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Valore</label>
+                <select x-model="valSingolo"
+                        class="w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-800">
+                    <option value="">— scegli —</option>
+                    <template x-for="opt in info.choices" :key="opt[0]">
+                        <option :value="opt[0]" x-text="opt[1] + ' (' + opt[0] + ')'"></option>
+                    </template>
+                </select>
+            </div>
+
+            {# enum + in_lista: checkbox multipli #}
+            <div x-show="isEnum && op === 'in_lista'" x-cloak>
+                <label class="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Valori (almeno uno)</label>
+                <div class="space-y-1 rounded-md border border-slate-200 p-2 text-sm dark:border-slate-700">
+                    <template x-for="opt in info.choices" :key="opt[0]">
+                        <label class="flex items-center gap-2">
+                            <input type="checkbox" :value="opt[0]" x-model="valLista"
+                                   class="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 dark:border-slate-600">
+                            <span x-text="opt[1] + ' (' + opt[0] + ')'"></span>
+                        </label>
+                    </template>
+                </div>
+            </div>
+
+            {# text libero #}
+            <div x-show="isText" x-cloak>
+                <label class="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Valore</label>
+                <input type="text" x-model="valTesto" placeholder="Es. sanitaria"
+                       class="w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-800">
+                <p class="mt-1 text-[11px] text-slate-500">
+                    Per "In lista" separa con virgola (es. <code>sanitaria,legale</code>).
+                </p>
+            </div>
+
+            {# bool: nessun valore richiesto #}
+            <div x-show="isBool" x-cloak class="text-[11px] text-slate-500">
+                Per Vero/Falso non serve un valore.
+            </div>
+
+            {# Hidden field effettivamente inviato al server #}
+            <input type="hidden" name="valore" :value="valoreFinale">
+
+            {# Ordine + attiva #}
+            <div class="grid grid-cols-2 gap-2">
+                <div>
+                    <label class="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Ordine</label>
+                    <input type="number" name="ordine" value="{{ nuova_regola_form.ordine.value|default:10 }}"
+                           class="w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-800">
+                </div>
+                <label class="mt-5 inline-flex items-center gap-2 text-sm">
+                    <input type="checkbox" name="attiva" checked
+                           class="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 dark:border-slate-600">
+                    <span>Attiva</span>
+                </label>
+            </div>
 
             <button type="submit" class="mt-2 rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
                 Aggiungi
             </button>
         </form>
+
+        <script>
+            function regolaForm() {
+                const data = JSON.parse(document.getElementById("campi-info-data").textContent);
+                const primoCampo = Object.keys(data)[0];
+                return {
+                    campiInfo: data,
+                    campo: primoCampo,
+                    op: data[primoCampo].kind === "bool" ? "vero" : "uguale",
+                    valSingolo: "",
+                    valLista: [],
+                    valTesto: "",
+                    get info() { return this.campiInfo[this.campo] || { kind: "text", choices: [] }; },
+                    get isBool() { return this.info.kind === "bool"; },
+                    get isEnum() { return this.info.kind === "enum"; },
+                    get isText() { return this.info.kind === "text"; },
+                    get valoreFinale() {
+                        if (this.op === "vero" || this.op === "falso") return "";
+                        if (this.isEnum && this.op === "in_lista") return this.valLista.join(",");
+                        if (this.isEnum) return this.valSingolo;
+                        return this.valTesto.trim();
+                    },
+                    init() {
+                        this.$watch("campo", () => {
+                            // Resetta operatore e valori quando cambia il campo
+                            this.op = this.isBool ? "vero" : "uguale";
+                            this.valSingolo = "";
+                            this.valLista = [];
+                            this.valTesto = "";
+                        });
+                    },
+                };
+            }
+        </script>
     </div>
 </div>
 
