@@ -132,33 +132,29 @@ Completamento checklist per singolo adempimento.
 - `data_completamento` (date, null)
 - `completato_da` (FK → UtenteStudio, null)
 
-#### `anagrafica.ProgressioneContabilita`
-Stato corrente della registrazione contabile mensile (solo clienti interni).
-- `anagrafica` (FK)
-- `anno` (int)
-- `mese_ultimo_registrato` (int 0-12, 0 = niente registrato)
-- `updated_at` (auto)
-- `updated_by` (FK → UtenteStudio, null)
-- UNIQUE `(anagrafica, anno)`
+#### Sezione "Avanzamento operativo" — tenuta contabilità interna
 
-#### `anagrafica.ProgressioneContabilitaLog`
-Log append-only per domande retrospettive ("al 30/9, dove eravamo?").
-- `anagrafica` (FK)
-- `anno` (int)
-- `mese_ultimo_registrato` (int 0-12)
-- `rilevato_il` (datetime)
-- `utente` (FK → UtenteStudio, null)
-- INDEX `(anagrafica, anno, rilevato_il DESC)`
+Modelli `AvanzamentoMensile` + `AvanzamentoSnapshot` + `AvanzamentoSnapshotRiga`.
 
-Indice ponderato di aggiornamento studio:
-`% = Σ(peso × mesi_ok) / (Σ(peso) × 12) × 100`
+Sezione di sidebar dedicata, **separata** dal catalogo `Adempimento`. Per
+ogni mese si tracciano tre flag (PN / RA / RV) + data VB (incontro col cliente
+e visione bilancio del mese). La cristallizzazione è manuale on-demand
+(snapshot etichettato, immutabile). Il calcolo % avanzamento ponderato usa
+solo PN: `% = Σ(peso × mesi_PN) / Σ(peso × 12) × 100`.
+
+Design completo, modello dati e UI: vedi
+[`docs/sezioni/avanzamento-operativo.md`](docs/sezioni/avanzamento-operativo.md).
+
+> Nota: i precedenti `ProgressioneContabilita` / `ProgressioneContabilitaLog`
+> sono stati **superati** da questo design (singolo `mese_ultimo_registrato`
+> non bastava: servono tre flag separati per registro + data VB).
 
 ### Campi aggiunti su `anagrafica.Anagrafica` (profilo fiscale)
 
 | Campo                          | Tipo              | Default                        |
 |--------------------------------|-------------------|--------------------------------|
 | `contabilita`                  | choice INT/EST    | ESTERNA                        |
-| `peso_contabilita`             | PositiveSmallInt  | 0                              |
+| `peso_contabilita`             | int 1-6, null     | null = non classificato        |
 | `sostituto_imposta`            | bool              | False                          |
 | `iscritto_cciaa`               | bool              | False                          |
 | `data_fine_esercizio`          | CharField "MM-DD" | "12-31"                        |
@@ -219,6 +215,19 @@ Refactoring da architettura "tabella-per-tipo" a "catalogo-driven":
 - Vista matrice per tipo in sidebar
 - Scheda cliente con tab adempimenti
 - Home = scadenzario personale
+
+### Fase 2-bis (in parallelo) — Sezione "Avanzamento operativo"
+
+Sezione dedicata fuori dal catalogo adempimenti, da sviluppare subito perché
+sblocca un'attività operativa quotidiana (controllo dello stato di tenuta
+contabilità interna). Dettaglio in
+[`docs/sezioni/avanzamento-operativo.md`](docs/sezioni/avanzamento-operativo.md).
+
+- Migrazione `peso_contabilita` a int 1-6
+- Modelli `AvanzamentoMensile` + snapshot
+- Vista matrice mensile (PN/RA/RV/VB) con HTMX
+- Cristallizzazione manuale on-demand
+- Selettori anno + snapshot, % ponderata in header
 
 ### Fase 3 — Adempimenti successivi (uno per PR)
 
@@ -283,8 +292,8 @@ della radice:
 - `AnagraficaReferenteStudio` → cascade da `Anagrafica`
 - `AnagraficaLegame` → cascade da `Anagrafica`
 - `StepCompletato` → cascade da `Adempimento`
-- `ProgressioneContabilita` → cascade da `Anagrafica`
-- `ProgressioneContabilitaLog` → cascade da `Anagrafica`
+- `AvanzamentoMensile` → cascade da `Anagrafica`
+- `AvanzamentoSnapshotRiga` → cascade dallo `Snapshot`; protect su `Anagrafica`
 
 ### Tabelle mai toccate da `flush_demo`
 
