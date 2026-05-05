@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block title %}Nuovo import — StudioHub{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto">
+  <header class="mb-4">
+    <nav class="text-xs text-slate-500 mb-1">
+      <a href="{% url 'importazione:list' %}" class="hover:underline">Importazione dati</a>
+      <span aria-hidden="true">›</span>
+      <span>Nuovo import</span>
+    </nav>
+    <h1 class="text-xl font-semibold">Nuovo import — Step 1: caricamento file</h1>
+    <p class="text-sm text-slate-500">
+      Il file viene letto e mostrato in anteprima. Il match con le anagrafiche esistenti
+      avviene in uno step successivo: nessun dato viene scritto sull'anagrafica finché non confermi.
+    </p>
+  </header>
+
+  {% if messages %}
+    {% for m in messages %}
+      <div class="mb-3 rounded border px-3 py-2 text-sm
+                  {% if m.tags == 'error' %}border-red-200 bg-red-50 text-red-800
+                  {% else %}border-slate-200 bg-slate-50 text-slate-800{% endif %}">
+        {{ m }}
+      </div>
+    {% endfor %}
+  {% endif %}
+
+  <form method="post" enctype="multipart/form-data"
+        class="space-y-4 rounded border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+      <div class="rounded border border-red-200 bg-red-50 p-2 text-sm text-red-800">
+        {{ form.non_field_errors }}
+      </div>
+    {% endif %}
+
+    <div>
+      <label class="block text-sm font-medium mb-1" for="{{ form.nome.id_for_label }}">Nome sessione</label>
+      {{ form.nome }}
+      {% if form.nome.errors %}<p class="mt-1 text-xs text-red-600">{{ form.nome.errors|join:", " }}</p>{% endif %}
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium mb-1" for="{{ form.file.id_for_label }}">File Excel (.xlsx)</label>
+      {{ form.file }}
+      {% if form.file.errors %}<p class="mt-1 text-xs text-red-600">{{ form.file.errors|join:", " }}</p>{% endif %}
+    </div>
+
+    <div class="grid grid-cols-2 gap-4">
+      <div>
+        <label class="block text-sm font-medium mb-1" for="{{ form.sheet_name.id_for_label }}">Nome foglio</label>
+        {{ form.sheet_name }}
+        <p class="mt-1 text-xs text-slate-500">Vuoto = primo foglio.</p>
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1" for="{{ form.header_row.id_for_label }}">Riga intestazione</label>
+        {{ form.header_row }}
+        <p class="mt-1 text-xs text-slate-500">Numero della riga con i nomi colonna (1-based).</p>
+      </div>
+    </div>
+
+    <div>
+      <label class="flex items-start gap-2 text-sm">
+        {{ form.consente_creazione }}
+        <span>
+          <span class="font-medium">Consenti creazione di nuove anagrafiche</span>
+          <span class="block text-xs text-slate-500">
+            Da attivare solo per il file master iniziale. Per i file successivi
+            le righe non matchate vanno saltate o associate manualmente.
+          </span>
+        </span>
+      </label>
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium mb-1" for="{{ form.note.id_for_label }}">Note</label>
+      {{ form.note }}
+    </div>
+
+    <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+      <a href="{% url 'importazione:list' %}" class="text-sm text-slate-600 hover:underline">Annulla</a>
+      <button type="submit"
+              class="rounded bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
+        Carica e analizza
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}
