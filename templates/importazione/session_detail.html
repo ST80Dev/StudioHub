@@ -35,6 +35,29 @@
     {% endfor %}
   {% endif %}
 
+  {% if sessione.column_mapping is not None %}
+  <section class="mb-4 rounded border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3">
+    <div class="flex items-baseline justify-between gap-3">
+      <h2 class="text-sm font-semibold">Mapping colonne</h2>
+      <a href="{% url 'importazione:mapping_edit' sessione.pk %}"
+         class="text-xs text-brand-700 hover:underline">Modifica mapping →</a>
+    </div>
+    <div class="mt-2 flex flex-wrap gap-2 text-xs">
+      {% for col in colonne %}
+        {% with target=sessione.column_mapping|get_item:col %}
+          <span class="rounded border border-slate-200 dark:border-slate-700 px-2 py-0.5">
+            <span class="font-medium">{{ col }}</span>
+            <span class="text-slate-400">→</span>
+            <span class="{% if target %}text-emerald-700{% else %}text-slate-400 italic{% endif %}">
+              {{ target|default:"non mappata" }}
+            </span>
+          </span>
+        {% endwith %}
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
   <section class="mb-4 rounded border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3">
     <div class="flex items-center justify-between gap-4 flex-wrap">
       <div class="flex items-center gap-2 text-xs flex-wrap">

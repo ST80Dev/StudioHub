@@ -9,6 +9,11 @@ from django.views.decorators.http import require_POST
 
 from anagrafica.models import Anagrafica
 
+from .fields import (
+    ANAGRAFICA_FIELDS_GROUPS,
+    EXTRA_SUGGESTED,
+    is_valid_target,
+)
 from .forms import ImportSessionUploadForm
 from .matching import run_matching
 from .models import (
@@ -126,6 +131,88 @@ def session_detail(request, pk: int):
             "counts": counts,
             "decisione_filter": decisione_filter,
             "ImportRowDecisione": ImportRowDecisione,
+        },
+    )
+
+
+@login_required
+def session_mapping_edit(request, pk: int):
+    """Step 2: editor del mapping colonne -> campi target.
+
+    Su POST salva column_mapping. Lato client il select consente di scegliere
+    fra i campi Anagrafica e i suggerimenti `extra:*`; chi vuole una chiave
+    extra arbitraria la digita nel campo `extra_<i>` accanto al select.
+    """
+    sessione = get_object_or_404(ImportSession, pk=pk)
+    colonne: list[str] = (sessione.riepilogo or {}).get("columns_detected", [])
+    mapping_attuale = dict(sessione.column_mapping or {})
+
+    if request.method == "POST":
+        nuovo_mapping: dict[str, str] = {}
+        errori: list[str] = []
+        for i, col in enumerate(colonne):
+            target = (request.POST.get(f"target_{i}") or "").strip()
+            extra_custom = (request.POST.get(f"extra_{i}") or "").strip()
+            # Se l'utente ha scritto un extra custom, vince sul select.
+            if extra_custom:
+                target = f"extra:{extra_custom}"
+            if not is_valid_target(target):
+                errori.append(f"Colonna '{col}': destinazione '{target}' non valida.")
+                continue
+            if target:
+                nuovo_mapping[col] = target
+
+        if errori:
+            for e in errori:
+                messages.error(request, e)
+        else:
+            sessione.column_mapping = nuovo_mapping
+            sessione.save(update_fields=["column_mapping"])
+            messages.success(
+                request,
+                f"Mapping aggiornato ({len(nuovo_mapping)} colonne mappate, "
+                f"{len(colonne) - len(nuovo_mapping)} ignorate).",
+            )
+            return redirect("importazione:detail", pk=sessione.pk)
+        # In caso di errori, ricarico il form con i valori inviati.
+        mapping_attuale = {col: (request.POST.get(f"target_{i}") or "").strip()
+                           for i, col in enumerate(colonne)}
+
+    # Costruisco i sample (primo valore non vuoto per ogni colonna), utile a
+    # riconoscere a vista il contenuto della colonna nel form.
+    sample_values: dict[str, str] = {}
+    for r in sessione.righe.values_list("dati_grezzi", flat=True)[:50]:
+        for col in colonne:
+            v = (r or {}).get(col, "")
+            if v and col not in sample_values:
+                sample_values[col] = str(v)
+        if len(sample_values) == len(colonne):
+            break
+
+    rows_form = []
+    for i, col in enumerate(colonne):
+        target = mapping_attuale.get(col, "")
+        # Se è una chiave extra non in EXTRA_SUGGESTED, la prepopolo nel campo libero.
+        extra_custom = ""
+        if target.startswith("extra:") and (target not in {v for v, _ in EXTRA_SUGGESTED}):
+            extra_custom = target[len("extra:"):]
+            target = ""  # il select rimane vuoto, vince il campo libero
+        rows_form.append({
+            "index": i,
+            "col": col,
+            "sample": sample_values.get(col, ""),
+            "target": target,
+            "extra_custom": extra_custom,
+        })
+
+    return render(
+        request,
+        "importazione/session_mapping.html",
+        {
+            "sessione": sessione,
+            "rows": rows_form,
+            "anagrafica_groups": ANAGRAFICA_FIELDS_GROUPS,
+            "extra_suggested": EXTRA_SUGGESTED,
         },
     )
 
