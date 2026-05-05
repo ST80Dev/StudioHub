@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}Importazione dati — StudioHub{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto">
+  <header class="mb-4 flex items-baseline justify-between">
+    <div>
+      <h1 class="text-xl font-semibold">Importazione dati</h1>
+      <p class="text-sm text-slate-500">
+        Carica file Excel/CSV con anagrafiche e dati operativi.
+        Il sistema propone i match con le anagrafiche esistenti; tu confermi prima dell'apply.
+      </p>
+    </div>
+    <button type="button"
+            class="rounded bg-brand-600 px-3 py-1.5 text-sm font-medium text-white opacity-50 cursor-not-allowed"
+            title="Wizard di upload in arrivo nei prossimi step">
+      Nuovo import
+    </button>
+  </header>
+
+  <div class="rounded border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
+    <table class="min-w-full text-sm">
+      <thead class="bg-slate-50 dark:bg-slate-800/40 text-left text-xs uppercase text-slate-500">
+        <tr>
+          <th class="px-3 py-2">Nome</th>
+          <th class="px-3 py-2">Stato</th>
+          <th class="px-3 py-2">Crea nuove?</th>
+          <th class="px-3 py-2">Caricato da</th>
+          <th class="px-3 py-2">Data</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+        {% for s in sessioni %}
+        <tr>
+          <td class="px-3 py-2 font-medium">{{ s.nome }}</td>
+          <td class="px-3 py-2">{{ s.get_stato_display }}</td>
+          <td class="px-3 py-2">{% if s.consente_creazione %}sì{% else %}no{% endif %}</td>
+          <td class="px-3 py-2">{{ s.creato_da }}</td>
+          <td class="px-3 py-2 text-slate-500">{{ s.created_at|date:"d/m/Y H:i" }}</td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="5" class="px-3 py-8 text-center text-slate-500">
+            Nessuna sessione di import.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

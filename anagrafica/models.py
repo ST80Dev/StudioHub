@@ -75,6 +75,28 @@ class Anagrafica(models.Model):
     codice_fiscale = models.CharField(max_length=16, blank=True, db_index=True)
     partita_iva = models.CharField(max_length=11, blank=True, db_index=True)
 
+    # Codici provenienti dai gestionali esterni. Usati come chiavi di match
+    # negli import Excel. Tutti opzionali: non ogni anagrafica li ha tutti.
+    codice_cli = models.CharField(
+        max_length=16,
+        null=True,
+        blank=True,
+        unique=True,
+        help_text="COD CLI ANA — progressivo anagrafica unica gestionale (id_oe002_cliente).",
+    )
+    codice_multi = models.CharField(
+        max_length=16,
+        blank=True,
+        db_index=True,
+        help_text="COD MULTI — progressivo ditta nel gestionale di contabilità.",
+    )
+    codice_gstudio = models.CharField(
+        max_length=16,
+        blank=True,
+        db_index=True,
+        help_text="COD GSTU — progressivo nel gestionale registrazione ore (id_bp004_cliente).",
+    )
+
     stato = models.CharField(
         max_length=10,
         choices=StatoAnagrafica.choices,

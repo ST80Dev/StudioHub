@@ -37,6 +37,11 @@
                   {% if '/configurazione/' in path %}bg-slate-100 font-medium text-brand-700 dark:bg-slate-800 dark:text-brand-500{% endif %}">
             <span aria-hidden="true">🛠️</span> Configurazione
         </a>
+        <a href="{% url 'importazione:list' %}"
+           class="flex items-center gap-2 px-4 py-2 hover:bg-slate-100 dark:hover:bg-slate-800
+                  {% if '/importazione/' in path %}bg-slate-100 font-medium text-brand-700 dark:bg-slate-800 dark:text-brand-500{% endif %}">
+            <span aria-hidden="true">📥</span> Importazione dati
+        </a>
         <a href="/admin/"
            class="flex items-center gap-2 px-4 py-2 hover:bg-slate-100 dark:hover:bg-slate-800">
             <span aria-hidden="true">⚙️</span> Admin Django
