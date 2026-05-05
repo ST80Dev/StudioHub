@@ -15,14 +15,13 @@
       <h1 class="text-xl font-semibold">{{ sessione.nome }}</h1>
       <div class="flex items-center gap-3 text-sm">
         <span class="rounded bg-slate-100 dark:bg-slate-800 px-2 py-0.5">{{ sessione.get_stato_display }}</span>
-        <a href="{% url 'importazione:delete' sessione.pk %}"
-           class="text-red-700 hover:underline">Elimina</a>
+        <a href="{% url 'importazione:delete' sessione.pk %}" class="text-red-700 hover:underline">Elimina</a>
       </div>
     </div>
     <p class="text-sm text-slate-500 mt-1">
       Foglio: <span class="font-medium">{{ sessione.riepilogo.sheet_name|default:"—" }}</span> ·
       Righe lette: <span class="font-medium">{{ totale_righe }}</span> ·
-      Sezioni rilevate: <span class="font-medium">{{ sessione.riepilogo.sections_seen|length }}</span> ·
+      Sezioni: <span class="font-medium">{{ sessione.riepilogo.sections_seen|length }}</span> ·
       Crea nuove: <span class="font-medium">{% if sessione.consente_creazione %}sì{% else %}no{% endif %}</span>
     </p>
   </header>
@@ -36,51 +35,67 @@
     {% endfor %}
   {% endif %}
 
-  {% if sessione.column_mapping %}
   <section class="mb-4 rounded border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3">
-    <h2 class="text-sm font-semibold mb-2">Mapping colonne (autodetect)</h2>
-    <div class="flex flex-wrap gap-2 text-xs">
-      {% for col in colonne %}
-        {% with target=sessione.column_mapping|get_item:col %}
-          <span class="rounded border border-slate-200 dark:border-slate-700 px-2 py-0.5">
-            <span class="font-medium">{{ col }}</span>
-            <span class="text-slate-400">→</span>
-            <span class="{% if target %}text-emerald-700{% else %}text-slate-400 italic{% endif %}">
-              {{ target|default:"non mappata" }}
-            </span>
-          </span>
-        {% endwith %}
-      {% endfor %}
+    <div class="flex items-center justify-between gap-4 flex-wrap">
+      <div class="flex items-center gap-2 text-xs flex-wrap">
+        <span class="text-slate-500">Filtra:</span>
+        <a href="?" class="rounded border px-2 py-0.5 {% if not decisione_filter %}border-brand-500 text-brand-700{% else %}border-slate-200{% endif %}">
+          Tutte ({{ totale_righe }})
+        </a>
+        <a href="?decisione=auto_match" class="rounded border px-2 py-0.5 {% if decisione_filter == 'auto_match' %}border-emerald-500 text-emerald-700{% else %}border-slate-200{% endif %}">
+          Auto-match ({{ counts.auto_match }})
+        </a>
+        <a href="?decisione=pending" class="rounded border px-2 py-0.5 {% if decisione_filter == 'pending' %}border-amber-500 text-amber-700{% else %}border-slate-200{% endif %}">
+          Da rivedere ({{ counts.pending }})
+        </a>
+        <a href="?decisione=confermato" class="rounded border px-2 py-0.5 {% if decisione_filter == 'confermato' %}border-emerald-500 text-emerald-700{% else %}border-slate-200{% endif %}">
+          Confermate ({{ counts.confermato }})
+        </a>
+        <a href="?decisione=nuova" class="rounded border px-2 py-0.5 {% if decisione_filter == 'nuova' %}border-blue-500 text-blue-700{% else %}border-slate-200{% endif %}">
+          Da creare ({{ counts.nuova }})
+        </a>
+        <a href="?decisione=skip" class="rounded border px-2 py-0.5 {% if decisione_filter == 'skip' %}border-slate-500 text-slate-700{% else %}border-slate-200{% endif %}">
+          Saltate ({{ counts.skip }})
+        </a>
+      </div>
+      <form method="post" action="{% url 'importazione:run_matching' sessione.pk %}">
+        {% csrf_token %}
+        <button type="submit"
+                class="rounded bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
+          {% if sessione.riepilogo.match_stats %}Ricalcola matching{% else %}Esegui matching{% endif %}
+        </button>
+      </form>
     </div>
+    {% if sessione.riepilogo.match_stats %}
     <p class="mt-2 text-xs text-slate-500">
-      L'editor di mapping (modificabile) sarà disponibile nello step 2.
+      Ultimo matching:
+      <strong>{{ sessione.riepilogo.match_stats.auto_match }}</strong> auto ·
+      <strong>{{ sessione.riepilogo.match_stats.pending }}</strong> da rivedere ·
+      <strong>{{ sessione.riepilogo.match_stats.nessun_match }}</strong> senza candidato.
+      Metodi:
+      {% for k, v in sessione.riepilogo.match_stats.metodi.items %}{{ k }}={{ v }}{% if not forloop.last %} · {% endif %}{% endfor %}
     </p>
+    {% endif %}
   </section>
-  {% endif %}
-
-  {% if sessione.riepilogo.sections_seen %}
-  <section class="mb-4 rounded border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3">
-    <h2 class="text-sm font-semibold mb-2">Sezioni rilevate</h2>
-    <ul class="text-xs text-slate-600 dark:text-slate-300 space-y-0.5">
-      {% for s in sessione.riepilogo.sections_seen %}
-        <li>· {{ s }}</li>
-      {% endfor %}
-    </ul>
-  </section>
-  {% endif %}
 
   <section class="rounded border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
-    <div class="px-3 py-2 border-b border-slate-100 dark:border-slate-800 text-sm font-semibold">
-      Anteprima righe (prime {{ righe|length }} di {{ totale_righe }})
+    <div class="px-3 py-2 border-b border-slate-100 dark:border-slate-800 text-sm font-semibold flex items-center justify-between">
+      <span>Righe (mostrate {{ righe|length }} di {{ totale_righe }})</span>
+      {% if righe|length >= 300 %}
+        <span class="text-xs text-slate-500">limite anteprima 300</span>
+      {% endif %}
     </div>
     <div class="overflow-x-auto">
       <table class="min-w-full text-xs">
         <thead class="bg-slate-50 dark:bg-slate-800/40 text-left uppercase text-slate-500">
           <tr>
             <th class="px-2 py-1.5 sticky left-0 bg-slate-50 dark:bg-slate-800/60">#</th>
-            <th class="px-2 py-1.5">Tipo soggetto (sez.)</th>
-            <th class="px-2 py-1.5">Regime (sez.)</th>
-            <th class="px-2 py-1.5">Contab. (sez.)</th>
+            <th class="px-2 py-1.5">Esito</th>
+            <th class="px-2 py-1.5">Anagrafica match</th>
+            <th class="px-2 py-1.5">Metodo</th>
+            <th class="px-2 py-1.5">Conf.</th>
+            <th class="px-2 py-1.5">Azioni</th>
+            <th class="px-2 py-1.5">Tipo (sez.)</th>
             {% for col in colonne %}
               <th class="px-2 py-1.5 whitespace-nowrap">{{ col }}</th>
             {% endfor %}
@@ -88,15 +103,7 @@
         </thead>
         <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
           {% for r in righe %}
-          <tr>
-            <td class="px-2 py-1.5 sticky left-0 bg-white dark:bg-slate-900 text-slate-400">{{ r.numero_riga }}</td>
-            <td class="px-2 py-1.5">{{ r.contesto_sezione.tipo_soggetto|default:"—" }}</td>
-            <td class="px-2 py-1.5">{{ r.contesto_sezione.regime_contabile|default:"—" }}</td>
-            <td class="px-2 py-1.5">{{ r.contesto_sezione.contabilita|default:"—" }}</td>
-            {% for col in colonne %}
-              <td class="px-2 py-1.5 whitespace-nowrap">{{ r.dati_grezzi|get_item:col|default:"" }}</td>
-            {% endfor %}
-          </tr>
+            {% include "importazione/_row.html" with r=r %}
           {% endfor %}
         </tbody>
       </table>
@@ -104,7 +111,58 @@
   </section>
 
   <p class="mt-4 text-xs text-slate-500">
-    Prossimo step: editor di mapping colonne, motore di matching, conferma riga-per-riga, apply.
+    Prossimo step: apply transazionale (scrittura su Anagrafica + DatoImportato + alias).
   </p>
 </div>
+
+<script>
+  // Autocomplete leggero: cerca anagrafiche e mostra suggerimenti sotto l'input.
+  // Funziona con qualsiasi <input data-anagrafica-search="<row_id>">.
+  document.addEventListener('input', function (e) {
+    const input = e.target.closest('input[data-anagrafica-search]');
+    if (!input) return;
+    const rowId = input.dataset.anagraficaSearch;
+    const list = document.getElementById('suggest-' + rowId);
+    if (!list) return;
+    const q = input.value.trim();
+    if (q.length < 2) { list.innerHTML = ''; list.classList.add('hidden'); return; }
+    fetch(`{% url 'importazione:anagrafica_search' %}?q=` + encodeURIComponent(q))
+      .then(r => r.json())
+      .then(data => {
+        if (!data.results.length) { list.innerHTML = ''; list.classList.add('hidden'); return; }
+        list.innerHTML = data.results.map(a =>
+          `<button type="button" data-id="${a.id}"
+            class="block w-full text-left px-2 py-1 hover:bg-slate-100 dark:hover:bg-slate-700">
+              <div class="font-medium">${a.label}</div>
+              <div class="text-[10px] text-slate-500">${a.sublabel || ''}</div>
+            </button>`
+        ).join('');
+        list.classList.remove('hidden');
+      });
+  });
+
+  // Click su un suggerimento: triggera POST a row_update con l'anagrafica scelta.
+  document.addEventListener('click', function (e) {
+    const btn = e.target.closest('[data-id]');
+    if (!btn) return;
+    const list = btn.closest('[id^="suggest-"]');
+    if (!list) return;
+    const rowId = list.id.replace('suggest-', '');
+    const tr = document.getElementById('row-' + rowId);
+    if (!tr) return;
+    const csrf = document.querySelector('[name=csrfmiddlewaretoken]').value;
+    const fd = new FormData();
+    fd.append('csrfmiddlewaretoken', csrf);
+    fd.append('anagrafica_id', btn.dataset.id);
+    fetch(`{% url 'importazione:list' %}riga/${rowId}/`, {
+      method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    }).then(r => r.text()).then(html => {
+      const tmp = document.createElement('tbody');
+      tmp.innerHTML = html;
+      tr.replaceWith(tmp.firstElementChild);
+    });
+  });
+</script>
+
+<form style="display:none">{% csrf_token %}</form>
 {% endblock %}

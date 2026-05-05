@@ -1,0 +1,66 @@
+{% load importazione_extras %}
+<tr id="row-{{ r.pk }}" class="align-top">
+  <td class="px-2 py-1.5 sticky left-0 bg-white dark:bg-slate-900 text-slate-400">{{ r.numero_riga }}</td>
+  <td class="px-2 py-1.5">
+    {% if r.decisione == ImportRowDecisione.AUTO_MATCH %}
+      <span class="rounded bg-emerald-100 text-emerald-800 px-1.5 py-0.5">auto</span>
+    {% elif r.decisione == ImportRowDecisione.CONFERMATO %}
+      <span class="rounded bg-emerald-100 text-emerald-800 px-1.5 py-0.5">conferm.</span>
+    {% elif r.decisione == ImportRowDecisione.NUOVA %}
+      <span class="rounded bg-blue-100 text-blue-800 px-1.5 py-0.5">nuova</span>
+    {% elif r.decisione == ImportRowDecisione.SKIP %}
+      <span class="rounded bg-slate-100 text-slate-700 px-1.5 py-0.5">skip</span>
+    {% elif r.decisione == ImportRowDecisione.ERRORE %}
+      <span class="rounded bg-red-100 text-red-800 px-1.5 py-0.5">err</span>
+    {% else %}
+      <span class="rounded bg-amber-100 text-amber-800 px-1.5 py-0.5">pending</span>
+    {% endif %}
+  </td>
+  <td class="px-2 py-1.5 whitespace-nowrap">
+    {% if r.anagrafica_match %}
+      <a href="{% url 'anagrafica:detail' r.anagrafica_match.pk %}" class="text-brand-700 hover:underline">
+        {{ r.anagrafica_match.denominazione }}
+      </a>
+    {% else %}
+      <span class="text-slate-400">—</span>
+    {% endif %}
+  </td>
+  <td class="px-2 py-1.5 text-slate-500">{{ r.metodo_match|default:"—" }}</td>
+  <td class="px-2 py-1.5">{% if r.confidenza %}{{ r.confidenza|floatformat:2 }}{% else %}—{% endif %}</td>
+  <td class="px-2 py-1.5">
+    <div class="relative inline-block">
+      <input type="text"
+             data-anagrafica-search="{{ r.pk }}"
+             placeholder="cerca…"
+             class="w-32 rounded border-slate-300 text-xs px-1.5 py-0.5 dark:bg-slate-800 dark:border-slate-700"/>
+      <div id="suggest-{{ r.pk }}"
+           class="hidden absolute z-10 mt-0.5 w-64 max-h-48 overflow-y-auto rounded border border-slate-200 bg-white text-xs shadow-lg dark:border-slate-700 dark:bg-slate-800"></div>
+    </div>
+    <div class="mt-1 flex gap-1">
+      <form method="post" action="{% url 'importazione:row_update' r.pk %}" class="inline">
+        {% csrf_token %}
+        <input type="hidden" name="decisione" value="confermato"/>
+        <button type="submit" title="Conferma match proposto"
+                {% if not r.anagrafica_match %}disabled{% endif %}
+                class="rounded border border-emerald-300 px-1.5 py-0.5 text-emerald-700 hover:bg-emerald-50 disabled:opacity-40">✓</button>
+      </form>
+      <form method="post" action="{% url 'importazione:row_update' r.pk %}" class="inline">
+        {% csrf_token %}
+        <input type="hidden" name="decisione" value="nuova"/>
+        <button type="submit" title="Crea nuova anagrafica"
+                {% if not sessione.consente_creazione %}disabled title="Sessione non abilitata alla creazione"{% endif %}
+                class="rounded border border-blue-300 px-1.5 py-0.5 text-blue-700 hover:bg-blue-50 disabled:opacity-40">+</button>
+      </form>
+      <form method="post" action="{% url 'importazione:row_update' r.pk %}" class="inline">
+        {% csrf_token %}
+        <input type="hidden" name="decisione" value="skip"/>
+        <button type="submit" title="Salta riga"
+                class="rounded border border-slate-300 px-1.5 py-0.5 text-slate-600 hover:bg-slate-50">⊘</button>
+      </form>
+    </div>
+  </td>
+  <td class="px-2 py-1.5">{{ r.contesto_sezione.tipo_soggetto|default:"—" }}</td>
+  {% for col in colonne %}
+    <td class="px-2 py-1.5 whitespace-nowrap">{{ r.dati_grezzi|get_item:col|default:"" }}</td>
+  {% endfor %}
+</tr>
