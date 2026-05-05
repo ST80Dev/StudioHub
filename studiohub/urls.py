@@ -14,5 +14,6 @@ urlpatterns = [
     path("clienti/", include("anagrafica.urls")),
     path("adempimenti/", include("adempimenti.urls")),
     path("configurazione/", include("adempimenti.config_urls")),
+    path("importazione/", include("importazione.urls")),
     path("profilo/", include("accounts.urls")),
 ]

@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block title %}Elimina {{ sessione.nome }} — StudioHub{% endblock %}
+
+{% block content %}
+<div class="max-w-lg mx-auto">
+  <h1 class="text-xl font-semibold mb-2">Elimina sessione di import</h1>
+  <p class="text-sm text-slate-600 mb-4">
+    Stai per eliminare la sessione <strong>{{ sessione.nome }}</strong>
+    ({{ sessione.righe.count }} righe lette). I dati grezzi vengono cancellati.
+    Le anagrafiche già aggiornate o create non vengono toccate.
+  </p>
+  <form method="post" class="flex items-center gap-2">
+    {% csrf_token %}
+    <a href="{% url 'importazione:detail' sessione.pk %}" class="text-sm text-slate-600 hover:underline">Annulla</a>
+    <button type="submit" class="rounded bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700">
+      Elimina
+    </button>
+  </form>
+</div>
+{% endblock %}
