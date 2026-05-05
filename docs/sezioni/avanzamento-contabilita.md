@@ -1,8 +1,14 @@
-# Sezione "Avanzamento operativo" — tenuta contabilità interna
+# Avanzamento contabilità — tenuta contabilità interna
 
-Sezione dedicata in sidebar, **separata** dal catalogo `Adempimento`. Traccia
+Primo controllo della sezione di sidebar **"Avanzamento operativo"**. Traccia
 mese per mese lo stato di registrazione contabile dei clienti per cui lo studio
-elabora la contabilità internamente.
+elabora la contabilità internamente. È **separato** dal catalogo `Adempimento`.
+
+> "Avanzamento operativo" è il contenitore in sidebar destinato a raccogliere
+> più controlli di avanzamento su lavorazioni che non ha senso modellare come
+> adempimenti veri e propri. Questa nota copre il **primo** di quei controlli
+> (l'avanzamento contabilità). Altri controlli verranno aggiunti come note
+> sorelle in `docs/sezioni/`.
 
 > Sostituisce e raffina il design preliminare di `ProgressioneContabilita` /
 > `ProgressioneContabilitaLog` in `ROADMAP.md`. Le tabelle e la formula qui

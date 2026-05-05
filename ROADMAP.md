@@ -132,18 +132,22 @@ Completamento checklist per singolo adempimento.
 - `data_completamento` (date, null)
 - `completato_da` (FK → UtenteStudio, null)
 
-#### Sezione "Avanzamento operativo" — tenuta contabilità interna
+#### Sezione sidebar "Avanzamento operativo" — controllo "Avanzamento contabilità"
 
-Modelli `AvanzamentoMensile` + `AvanzamentoSnapshot` + `AvanzamentoSnapshotRiga`.
+"Avanzamento operativo" è una sezione di sidebar **separata** dal catalogo
+`Adempimento`, contenitore di più controlli su lavorazioni che non vanno
+modellate come adempimenti veri e propri. Il primo controllo è
+**Avanzamento contabilità** (tenuta contabilità interna).
 
-Sezione di sidebar dedicata, **separata** dal catalogo `Adempimento`. Per
-ogni mese si tracciano tre flag (PN / RA / RV) + data VB (incontro col cliente
-e visione bilancio del mese). La cristallizzazione è manuale on-demand
-(snapshot etichettato, immutabile). Il calcolo % avanzamento ponderato usa
-solo PN: `% = Σ(peso × mesi_PN) / Σ(peso × 12) × 100`.
+Modelli del primo controllo: `AvanzamentoMensile` + `AvanzamentoSnapshot` +
+`AvanzamentoSnapshotRiga`. Per ogni mese si tracciano tre flag (PN / RA / RV)
++ data VB (incontro col cliente e visione bilancio del mese). La
+cristallizzazione è manuale on-demand (snapshot etichettato, immutabile). Il
+calcolo % avanzamento ponderato usa solo PN:
+`% = Σ(peso × mesi_PN) / Σ(peso × 12) × 100`.
 
 Design completo, modello dati e UI: vedi
-[`docs/sezioni/avanzamento-operativo.md`](docs/sezioni/avanzamento-operativo.md).
+[`docs/sezioni/avanzamento-contabilita.md`](docs/sezioni/avanzamento-contabilita.md).
 
 > Nota: i precedenti `ProgressioneContabilita` / `ProgressioneContabilitaLog`
 > sono stati **superati** da questo design (singolo `mese_ultimo_registrato`
@@ -216,12 +220,13 @@ Refactoring da architettura "tabella-per-tipo" a "catalogo-driven":
 - Scheda cliente con tab adempimenti
 - Home = scadenzario personale
 
-### Fase 2-bis (in parallelo) — Sezione "Avanzamento operativo"
+### Fase 2-bis (in parallelo) — Avanzamento contabilità
 
-Sezione dedicata fuori dal catalogo adempimenti, da sviluppare subito perché
-sblocca un'attività operativa quotidiana (controllo dello stato di tenuta
-contabilità interna). Dettaglio in
-[`docs/sezioni/avanzamento-operativo.md`](docs/sezioni/avanzamento-operativo.md).
+Primo controllo della futura sezione sidebar "Avanzamento operativo", fuori
+dal catalogo adempimenti. Da sviluppare subito perché sblocca un'attività
+operativa quotidiana (controllo dello stato di tenuta contabilità interna).
+Dettaglio in
+[`docs/sezioni/avanzamento-contabilita.md`](docs/sezioni/avanzamento-contabilita.md).
 
 - Migrazione `peso_contabilita` a int 1-6
 - Modelli `AvanzamentoMensile` + snapshot
