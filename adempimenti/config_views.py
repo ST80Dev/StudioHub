@@ -4,12 +4,19 @@ CRUD per TipoAdempimentoCatalogo con gestione inline di scadenze,
 checklist e regole di applicabilità. La pagina di dettaglio espone i tre
 gruppi come tab distinti per non affollare un unico form.
 """
+import json
+
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.db import IntegrityError
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
+
+from anagrafica.models import Anagrafica
+
+from .models import tipi_applicabili
+from .regole_helpers import CAMPI_INFO, CASISTICHE_TIPICHE
 
 from .forms import (
     ChecklistStepForm,
@@ -101,6 +108,8 @@ def tipo_detail(request, pk: int):
         context["nuova_regola_form"] = RegolaApplicabilitaForm(
             initial={"ordine": _prossimo_ordine(tipo.regole.all())}
         )
+        context["campi_info"] = CAMPI_INFO
+        context["campi_info_json"] = json.dumps(CAMPI_INFO)
 
     return render(request, "configurazione/tipo_detail.html", context)
 
@@ -231,6 +240,46 @@ def regola_delete(request, pk: int, rid: int):
     ).delete()
     messages.success(request, "Regola rimossa.")
     return _redirect_tab(pk, TAB_REGOLE)
+
+
+# ---------------------------------------------------------------------------
+# Matrice profili → adempimenti
+# ---------------------------------------------------------------------------
+
+@staff_member_required
+def matrice(request):
+    """Mostra, per ciascuna casistica tipica di cliente, quali tipi adempimento
+    risultano applicabili in base alle regole configurate. Esegue il motore
+    regole su clienti fittizi (non persistono).
+    """
+    tipi = list(
+        TipoAdempimentoCatalogo.objects.filter(attivo=True)
+        .prefetch_related("regole")
+        .order_by("ordine", "denominazione")
+    )
+
+    casistiche = []
+    for cas in CASISTICHE_TIPICHE:
+        cliente_fittizio = Anagrafica(**cas["profilo"])
+        applicabili = {t.id for t in tipi_applicabili(cliente_fittizio)}
+        casistiche.append({
+            "nome": cas["nome"],
+            "profilo": cas["profilo"],
+            "applicabili_ids": applicabili,
+        })
+
+    # Tipi senza regole: vanno segnalati a parte perché il motore li ignora
+    tipi_senza_regole = [t for t in tipi if not any(r.attiva for r in t.regole.all())]
+
+    return render(
+        request,
+        "configurazione/matrice.html",
+        {
+            "tipi": tipi,
+            "casistiche": casistiche,
+            "tipi_senza_regole": tipi_senza_regole,
+        },
+    )
 
 
 # ---------------------------------------------------------------------------

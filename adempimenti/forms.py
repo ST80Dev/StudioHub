@@ -13,6 +13,7 @@ from .models import (
     ScadenzaPeriodo,
     TipoAdempimentoCatalogo,
 )
+from .regole_helpers import CAMPI_INFO, KIND_BOOL, KIND_ENUM, valori_validi
 
 
 INPUT_CLASSES = (
@@ -231,10 +232,51 @@ class RegolaApplicabilitaForm(forms.ModelForm):
 
     def clean(self):
         cleaned = super().clean()
+        campo = cleaned.get("campo_condizione")
         op = cleaned.get("operatore")
         valore = (cleaned.get("valore") or "").strip()
+
+        info = CAMPI_INFO.get(campo, {})
+        kind = info.get("kind", "")
+
+        # Coerenza operatore ↔ tipo campo
+        if kind == KIND_BOOL and op not in (OperatoreRegola.VERO, OperatoreRegola.FALSO):
+            self.add_error(
+                "operatore",
+                "Per un campo Sì/No usa solo 'Vero' o 'Falso'.",
+            )
+        if kind != KIND_BOOL and op in (OperatoreRegola.VERO, OperatoreRegola.FALSO):
+            self.add_error(
+                "operatore",
+                "'Vero'/'Falso' sono validi solo per i campi Sì/No "
+                "(Sostituto d'imposta, Iscritto CCIAA).",
+            )
+
+        # Valore richiesto / vietato
         if op in (OperatoreRegola.UGUALE, OperatoreRegola.IN_LISTA) and not valore:
             self.add_error("valore", "Obbligatorio per questo operatore.")
         if op in (OperatoreRegola.VERO, OperatoreRegola.FALSO):
             cleaned["valore"] = ""
+            valore = ""
+
+        # Valore deve essere nei choices per campi enum
+        if kind == KIND_ENUM and valore:
+            ammessi = valori_validi(campo)
+            presenti = {v.strip() for v in valore.split(",") if v.strip()}
+            non_validi = presenti - ammessi
+            if non_validi:
+                self.add_error(
+                    "valore",
+                    "Valori non riconosciuti: "
+                    + ", ".join(sorted(non_validi))
+                    + ". Ammessi: "
+                    + ", ".join(sorted(ammessi)),
+                )
+            if op == OperatoreRegola.UGUALE and len(presenti) > 1:
+                self.add_error(
+                    "valore",
+                    "Con 'Uguale a' specifica un solo valore. "
+                    "Per confronti multipli usa 'In lista'.",
+                )
+
         return cleaned

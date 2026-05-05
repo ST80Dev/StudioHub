@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Matrice profili → adempimenti — Configurazione{% endblock %}
+
+{% block content %}
+{% include "configurazione/_subnav.html" with sub_active="matrice" %}
+{% include "configurazione/_messages.html" %}
+
+<div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+    <div>
+        <h1 class="text-lg font-semibold">Matrice profili → adempimenti</h1>
+        <p class="max-w-3xl text-xs text-slate-500">
+            Per ciascuna casistica tipica di cliente, vedi quali tipi adempimento
+            risultano applicabili secondo le regole oggi configurate.
+            Serve come <em>debug</em> delle regole e come documentazione vivente
+            di cosa fa la piattaforma. Le casistiche sono clienti fittizi
+            (non vengono salvati): per modificarle si edita
+            <code>adempimenti/regole_helpers.py</code>.
+        </p>
+    </div>
+</div>
+
+{% if tipi_senza_regole %}
+<div class="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+    <strong>Attenzione:</strong> i seguenti tipi non hanno regole attive,
+    quindi <em>non risulteranno mai applicabili automaticamente</em> a nessun cliente:
+    {% for t in tipi_senza_regole %}<a href="{% url 'configurazione:tipo_detail' t.pk %}?tab=regole" class="font-medium underline">{{ t.denominazione }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}.
+</div>
+{% endif %}
+
+{% if not tipi %}
+<div class="rounded-md border border-slate-200 bg-white p-6 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900">
+    Nessun tipo adempimento attivo. Crea il primo dalla
+    <a href="{% url 'configurazione:tipi_list' %}" class="text-brand-700 hover:underline dark:text-brand-500">sezione Tipi adempimento</a>.
+</div>
+{% else %}
+<div class="overflow-auto rounded-md border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+    <table class="sh-table sh-table-sticky-first w-full text-sm">
+        <thead>
+            <tr class="text-left text-[11px] uppercase tracking-wider text-slate-500">
+                <th class="px-3 sticky left-0 bg-white dark:bg-slate-900">Tipo adempimento</th>
+                {% for c in casistiche %}
+                <th class="px-2 align-bottom" title="{{ c.profilo }}">
+                    <div class="writing-mode-vertical text-[11px] leading-tight text-slate-600 dark:text-slate-400">
+                        {{ c.nome }}
+                    </div>
+                </th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+            {% for t in tipi %}
+            <tr class="hover:bg-slate-50 dark:hover:bg-slate-800">
+                <td class="px-3 py-1.5 sticky left-0 bg-white dark:bg-slate-900">
+                    <a href="{% url 'configurazione:tipo_detail' t.pk %}?tab=regole" class="font-medium text-brand-700 hover:underline dark:text-brand-500">
+                        {{ t.denominazione }}
+                    </a>
+                    <div class="text-[11px] text-slate-400">{{ t.codice }}</div>
+                </td>
+                {% for c in casistiche %}
+                <td class="px-2 py-1.5 text-center">
+                    {% if t.id in c.applicabili_ids %}
+                        <span class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-green-100 text-xs font-bold text-green-700 dark:bg-green-900 dark:text-green-300" title="Applicabile">✓</span>
+                    {% else %}
+                        <span class="text-slate-300 dark:text-slate-700">·</span>
+                    {% endif %}
+                </td>
+                {% endfor %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<details class="mt-4 max-w-3xl text-xs text-slate-500">
+    <summary class="cursor-pointer hover:text-slate-700 dark:hover:text-slate-300">Profili dettagliati delle casistiche</summary>
+    <div class="mt-2 space-y-2 rounded-md border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+        {% for c in casistiche %}
+        <div>
+            <div class="font-medium text-slate-700 dark:text-slate-300">{{ c.nome }}</div>
+            <div class="font-mono text-[11px] text-slate-500">
+                {% for k, v in c.profilo.items %}{% if v != "" and v != False %}{{ k }}={{ v }}{% if not forloop.last %} · {% endif %}{% endif %}{% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</details>
+{% endif %}
+
+<style>
+    .writing-mode-vertical {
+        writing-mode: vertical-rl;
+        transform: rotate(180deg);
+        white-space: nowrap;
+        max-height: 12rem;
+        text-overflow: ellipsis;
+        overflow: hidden;
+    }
+</style>
+{% endblock %}
