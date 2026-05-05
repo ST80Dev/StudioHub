@@ -8,6 +8,8 @@ whitenoise==6.8.2
 gunicorn==23.0.0
 # Parser Excel per l'importazione anagrafiche/dati operativi
 openpyxl==3.1.5
+# Fuzzy matching denominazioni (motore di import)
+rapidfuzz==3.10.1
 # Seed dati demo (management command seed_demo). Non usare in production runtime.
 factory-boy==3.3.1
 Faker==30.8.2
