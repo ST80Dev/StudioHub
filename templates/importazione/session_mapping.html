@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}Mapping colonne — {{ sessione.nome }}{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto">
+  <header class="mb-4">
+    <nav class="text-xs text-slate-500 mb-1">
+      <a href="{% url 'importazione:list' %}" class="hover:underline">Importazione dati</a>
+      <span aria-hidden="true">›</span>
+      <a href="{% url 'importazione:detail' sessione.pk %}" class="hover:underline">{{ sessione.nome }}</a>
+      <span aria-hidden="true">›</span>
+      <span>Mapping colonne</span>
+    </nav>
+    <h1 class="text-xl font-semibold">Step 2: mappatura colonne → campi target</h1>
+    <p class="text-sm text-slate-500">
+      Per ogni colonna del file scegli il campo di destinazione: un campo
+      Anagrafica, una chiave extra (verrà salvata come <code>DatoImportato</code>)
+      oppure "Ignora". I valori suggeriti sono frutto dell'autodetect.
+    </p>
+  </header>
+
+  {% if messages %}
+    {% for m in messages %}
+      <div class="mb-3 rounded border px-3 py-2 text-sm
+                  {% if m.tags == 'error' %}border-red-200 bg-red-50 text-red-800
+                  {% elif m.tags == 'success' %}border-emerald-200 bg-emerald-50 text-emerald-800
+                  {% else %}border-slate-200 bg-slate-50 text-slate-800{% endif %}">{{ m }}</div>
+    {% endfor %}
+  {% endif %}
+
+  <form method="post" class="rounded border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
+    {% csrf_token %}
+    <table class="min-w-full text-sm">
+      <thead class="bg-slate-50 dark:bg-slate-800/40 text-left text-xs uppercase text-slate-500">
+        <tr>
+          <th class="px-3 py-2 w-1/4">Colonna nel file</th>
+          <th class="px-3 py-2 w-1/4">Esempio</th>
+          <th class="px-3 py-2 w-1/4">Campo target</th>
+          <th class="px-3 py-2 w-1/4">Chiave extra (alternativa)</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+        {% for r in rows %}
+        <tr>
+          <td class="px-3 py-2 font-medium align-top">{{ r.col }}</td>
+          <td class="px-3 py-2 text-slate-500 align-top truncate max-w-xs" title="{{ r.sample }}">
+            {{ r.sample|default:"—" }}
+          </td>
+          <td class="px-3 py-2 align-top">
+            <select name="target_{{ r.index }}"
+                    class="w-full rounded border-slate-300 dark:bg-slate-800 dark:border-slate-700">
+              <option value="" {% if not r.target %}selected{% endif %}>— Ignora —</option>
+              {% for group_name, fields in anagrafica_groups %}
+                <optgroup label="{{ group_name }}">
+                  {% for value, label in fields %}
+                    <option value="{{ value }}" {% if r.target == value %}selected{% endif %}>{{ label }}</option>
+                  {% endfor %}
+                </optgroup>
+              {% endfor %}
+              <optgroup label="Extra (DatoImportato)">
+                {% for value, label in extra_suggested %}
+                  <option value="{{ value }}" {% if r.target == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </optgroup>
+            </select>
+          </td>
+          <td class="px-3 py-2 align-top">
+            <div class="flex items-center gap-1">
+              <span class="text-xs text-slate-400">extra:</span>
+              <input type="text" name="extra_{{ r.index }}" value="{{ r.extra_custom }}"
+                     placeholder="chiave_personalizzata"
+                     pattern="[A-Za-z0-9_\-]+"
+                     class="flex-1 rounded border-slate-300 text-sm px-2 py-1 dark:bg-slate-800 dark:border-slate-700"/>
+            </div>
+            <p class="mt-0.5 text-[11px] text-slate-400">
+              Se compilato vince sul select. Solo lettere, numeri, <code>_</code> e <code>-</code>.
+            </p>
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="4" class="px-3 py-8 text-center text-slate-500">
+            Nessuna colonna rilevata nel file.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div class="flex items-center justify-end gap-2 px-3 py-3 border-t border-slate-100 dark:border-slate-800">
+      <a href="{% url 'importazione:detail' sessione.pk %}"
+         class="text-sm text-slate-600 hover:underline">Annulla</a>
+      <button type="submit"
+              class="rounded bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
+        Salva mapping
+      </button>
+    </div>
+  </form>
+
+  <p class="mt-3 text-xs text-slate-500">
+    Suggerimento: dopo aver salvato il mapping ricalcola il matching dalla pagina
+    di dettaglio per riconsiderare i match in base ai campi appena mappati.
+  </p>
+</div>
+{% endblock %}
