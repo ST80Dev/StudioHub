@@ -1,5 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
@@ -107,6 +108,9 @@ def _filter_decisione(qs, decisione: str):
     return qs
 
 
+RIGHE_PER_PAGINA = 50
+
+
 @login_required
 def session_detail(request, pk: int):
     sessione = get_object_or_404(
@@ -120,13 +124,18 @@ def session_detail(request, pk: int):
     for d in sessione.righe.values_list("decisione", flat=True):
         counts[d] = counts.get(d, 0) + 1
 
+    paginator = Paginator(righe_qs, RIGHE_PER_PAGINA)
+    page_obj = paginator.get_page(request.GET.get("page"))
+
     return render(
         request,
         "importazione/session_detail.html",
         {
             "sessione": sessione,
-            "righe": righe_qs[:300],
+            "page_obj": page_obj,
+            "righe": page_obj.object_list,
             "totale_righe": sessione.righe.count(),
+            "totale_filtrato": righe_qs.count(),
             "colonne": (sessione.riepilogo or {}).get("columns_detected", []),
             "counts": counts,
             "decisione_filter": decisione_filter,
