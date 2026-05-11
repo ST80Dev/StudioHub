@@ -102,15 +102,23 @@
   </section>
 
   <section class="rounded border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
-    <div class="px-3 py-2 border-b border-slate-100 dark:border-slate-800 text-sm font-semibold flex items-center justify-between">
-      <span>Righe (mostrate {{ righe|length }} di {{ totale_righe }})</span>
-      {% if righe|length >= 300 %}
-        <span class="text-xs text-slate-500">limite anteprima 300</span>
-      {% endif %}
+    <div class="px-3 py-2 border-b border-slate-100 dark:border-slate-800 text-sm font-semibold flex items-center justify-between gap-3 flex-wrap">
+      <span>
+        Righe {{ page_obj.start_index }}–{{ page_obj.end_index }}
+        di {{ totale_filtrato }}
+        {% if decisione_filter %}<span class="text-xs font-normal text-slate-500">(filtrate)</span>{% endif %}
+      </span>
+      {% include "importazione/_paginator.html" with page_obj=page_obj %}
     </div>
-    <div class="overflow-x-auto">
+
+    {# Scrollbar orizzontale "ghost" in alto, sincronizzato con la tabella sotto. #}
+    <div id="rows-scroll-top" class="overflow-x-auto" style="height:14px;">
+      <div id="rows-scroll-top-inner" style="height:1px;"></div>
+    </div>
+
+    <div id="rows-scroll" class="overflow-x-auto max-h-[70vh]">
       <table class="min-w-full text-xs">
-        <thead class="bg-slate-50 dark:bg-slate-800/40 text-left uppercase text-slate-500">
+        <thead class="bg-slate-50 dark:bg-slate-800/40 text-left uppercase text-slate-500 sticky top-0 z-10">
           <tr>
             <th class="px-2 py-1.5 sticky left-0 bg-slate-50 dark:bg-slate-800/60">#</th>
             <th class="px-2 py-1.5">Esito</th>
@@ -131,12 +139,33 @@
         </tbody>
       </table>
     </div>
+
+    <div class="px-3 py-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end">
+      {% include "importazione/_paginator.html" with page_obj=page_obj %}
+    </div>
   </section>
 
   <p class="mt-4 text-xs text-slate-500">
     Prossimo step: apply transazionale (scrittura su Anagrafica + DatoImportato + alias).
   </p>
 </div>
+
+<script>
+  // Sincronizza lo scrollbar orizzontale "ghost" in alto con la tabella.
+  (function () {
+    const top = document.getElementById('rows-scroll-top');
+    const inner = document.getElementById('rows-scroll-top-inner');
+    const main = document.getElementById('rows-scroll');
+    if (!top || !main || !inner) return;
+    const tbl = main.querySelector('table');
+    const sync = () => { if (tbl) inner.style.width = tbl.scrollWidth + 'px'; };
+    sync();
+    new ResizeObserver(sync).observe(main);
+    let lock = false;
+    top.addEventListener('scroll', () => { if (lock) return; lock = true; main.scrollLeft = top.scrollLeft; lock = false; });
+    main.addEventListener('scroll', () => { if (lock) return; lock = true; top.scrollLeft = main.scrollLeft; lock = false; });
+  })();
+</script>
 
 <script>
   // Autocomplete leggero: cerca anagrafiche e mostra suggerimenti sotto l'input.

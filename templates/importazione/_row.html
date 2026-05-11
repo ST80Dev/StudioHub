@@ -37,21 +37,24 @@
            class="hidden absolute z-10 mt-0.5 w-64 max-h-48 overflow-y-auto rounded border border-slate-200 bg-white text-xs shadow-lg dark:border-slate-700 dark:bg-slate-800"></div>
     </div>
     <div class="mt-1 flex gap-1">
-      <form method="post" action="{% url 'importazione:row_update' r.pk %}" class="inline">
+      <form hx-post="{% url 'importazione:row_update' r.pk %}"
+            hx-target="#row-{{ r.pk }}" hx-swap="outerHTML" class="inline">
         {% csrf_token %}
         <input type="hidden" name="decisione" value="confermato"/>
         <button type="submit" title="Conferma match proposto"
                 {% if not r.anagrafica_match %}disabled{% endif %}
                 class="rounded border border-emerald-300 px-1.5 py-0.5 text-emerald-700 hover:bg-emerald-50 disabled:opacity-40">✓</button>
       </form>
-      <form method="post" action="{% url 'importazione:row_update' r.pk %}" class="inline">
+      <form hx-post="{% url 'importazione:row_update' r.pk %}"
+            hx-target="#row-{{ r.pk }}" hx-swap="outerHTML" class="inline">
         {% csrf_token %}
         <input type="hidden" name="decisione" value="nuova"/>
         <button type="submit" title="Crea nuova anagrafica"
                 {% if not sessione.consente_creazione %}disabled title="Sessione non abilitata alla creazione"{% endif %}
                 class="rounded border border-blue-300 px-1.5 py-0.5 text-blue-700 hover:bg-blue-50 disabled:opacity-40">+</button>
       </form>
-      <form method="post" action="{% url 'importazione:row_update' r.pk %}" class="inline">
+      <form hx-post="{% url 'importazione:row_update' r.pk %}"
+            hx-target="#row-{{ r.pk }}" hx-swap="outerHTML" class="inline">
         {% csrf_token %}
         <input type="hidden" name="decisione" value="skip"/>
         <button type="submit" title="Salta riga"
