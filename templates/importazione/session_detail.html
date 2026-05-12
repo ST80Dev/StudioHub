@@ -81,13 +81,19 @@
           Saltate ({{ counts.skip }})
         </a>
       </div>
-      <form method="post" action="{% url 'importazione:run_matching' sessione.pk %}">
-        {% csrf_token %}
-        <button type="submit"
-                class="rounded bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
-          {% if sessione.riepilogo.match_stats %}Ricalcola matching{% else %}Esegui matching{% endif %}
-        </button>
-      </form>
+      <div class="flex items-center gap-2">
+        <form method="post" action="{% url 'importazione:run_matching' sessione.pk %}">
+          {% csrf_token %}
+          <button type="submit"
+                  class="rounded bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
+            {% if sessione.riepilogo.match_stats %}Ricalcola matching{% else %}Esegui matching{% endif %}
+          </button>
+        </form>
+        <a href="{% url 'importazione:apply_preview' sessione.pk %}"
+           class="rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700">
+          Applica modifiche →
+        </a>
+      </div>
     </div>
     {% if sessione.riepilogo.match_stats %}
     <p class="mt-2 text-xs text-slate-500">
@@ -97,6 +103,19 @@
       <strong>{{ sessione.riepilogo.match_stats.nessun_match }}</strong> senza candidato.
       Metodi:
       {% for k, v in sessione.riepilogo.match_stats.metodi.items %}{{ k }}={{ v }}{% if not forloop.last %} · {% endif %}{% endfor %}
+    </p>
+    {% endif %}
+    {% if sessione.riepilogo.apply_stats %}
+    <p class="mt-2 text-xs text-emerald-700">
+      Ultimo apply ({{ sessione.applied_at|date:"d/m/Y H:i" }}):
+      <strong>{{ sessione.riepilogo.apply_stats.create }}</strong> create ·
+      <strong>{{ sessione.riepilogo.apply_stats.update }}</strong> aggiornate ·
+      <strong>{{ sessione.riepilogo.apply_stats.skip }}</strong> skip ·
+      <strong>{{ sessione.riepilogo.apply_stats.dati_importati }}</strong> dati extra ·
+      <strong>{{ sessione.riepilogo.apply_stats.alias_creati }}</strong> alias
+      {% if sessione.riepilogo.apply_stats.errori %}
+        · <span class="text-red-700"><strong>{{ sessione.riepilogo.apply_stats.errori }}</strong> errori</span>
+      {% endif %}
     </p>
     {% endif %}
   </section>
