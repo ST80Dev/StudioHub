@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block title %}Applica {{ sessione.nome }} — Importazione{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto">
+  <header class="mb-4">
+    <nav class="text-xs text-slate-500 mb-1">
+      <a href="{% url 'importazione:list' %}" class="hover:underline">Importazione dati</a>
+      <span aria-hidden="true">›</span>
+      <a href="{% url 'importazione:detail' sessione.pk %}" class="hover:underline">{{ sessione.nome }}</a>
+      <span aria-hidden="true">›</span>
+      <span>Applica</span>
+    </nav>
+    <h1 class="text-xl font-semibold">Step 4: applica modifiche all'anagrafica</h1>
+    <p class="text-sm text-slate-500">
+      Verifica il riepilogo, poi conferma per scrivere su <code>Anagrafica</code>
+      e <code>DatoImportato</code>. L'operazione è atomica per singola riga:
+      le righe che falliscono vengono marcate "errore" senza fermare le altre.
+    </p>
+  </header>
+
+  {% if messages %}
+    {% for m in messages %}
+      <div class="mb-3 rounded border px-3 py-2 text-sm
+                  {% if m.tags == 'error' %}border-red-200 bg-red-50 text-red-800
+                  {% elif m.tags == 'warning' %}border-amber-200 bg-amber-50 text-amber-800
+                  {% elif m.tags == 'success' %}border-emerald-200 bg-emerald-50 text-emerald-800
+                  {% else %}border-slate-200 bg-slate-50 text-slate-800{% endif %}">{{ m }}</div>
+    {% endfor %}
+  {% endif %}
+
+  <section class="rounded border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3">
+    <h2 class="text-sm font-semibold">Cosa succederà</h2>
+    <div class="grid grid-cols-2 gap-3 text-sm">
+      <div class="rounded bg-blue-50 dark:bg-blue-950/40 px-3 py-2">
+        <div class="text-blue-700 dark:text-blue-300 text-2xl font-semibold">{{ preview.da_creare }}</div>
+        <div class="text-xs text-slate-600 dark:text-slate-400">Anagrafiche da creare</div>
+      </div>
+      <div class="rounded bg-emerald-50 dark:bg-emerald-950/40 px-3 py-2">
+        <div class="text-emerald-700 dark:text-emerald-300 text-2xl font-semibold">{{ preview.da_aggiornare }}</div>
+        <div class="text-xs text-slate-600 dark:text-slate-400">Anagrafiche da aggiornare</div>
+      </div>
+      <div class="rounded bg-slate-100 dark:bg-slate-800 px-3 py-2">
+        <div class="text-slate-700 dark:text-slate-300 text-2xl font-semibold">{{ preview.da_saltare }}</div>
+        <div class="text-xs text-slate-600 dark:text-slate-400">Righe saltate (skip)</div>
+      </div>
+      <div class="rounded bg-amber-50 dark:bg-amber-950/40 px-3 py-2">
+        <div class="text-amber-700 dark:text-amber-300 text-2xl font-semibold">{{ preview.pending }}</div>
+        <div class="text-xs text-slate-600 dark:text-slate-400">Pending (non verranno applicate)</div>
+      </div>
+    </div>
+
+    <p class="text-xs text-slate-500">
+      Le righe in <strong>pending</strong> restano com'erano: nessun dato verrà scritto per loro.
+      Decisione "<strong>crea nuova</strong>" richiede che la sessione abbia abilitato la creazione:
+      attualmente <strong>{% if sessione.consente_creazione %}attiva{% else %}disattiva{% endif %}</strong>.
+    </p>
+
+    {% if preview.blocchi %}
+      <div class="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+        <p class="font-medium mb-1">Bloccanti da risolvere:</p>
+        <ul class="list-disc pl-5 space-y-0.5">
+          {% for b in preview.blocchi %}<li>{{ b }}</li>{% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+
+    <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+      <a href="{% url 'importazione:detail' sessione.pk %}"
+         class="text-sm text-slate-600 hover:underline">Annulla</a>
+      <form method="post" action="{% url 'importazione:apply_run' sessione.pk %}">
+        {% csrf_token %}
+        <button type="submit"
+                {% if preview.ha_bloccanti %}disabled{% endif %}
+                onclick="return confirm('Applicare le modifiche all\'anagrafica? L\'operazione modificherà i dati reali.')"
+                class="rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
+          Conferma e applica
+        </button>
+      </form>
+    </div>
+  </section>
+</div>
+{% endblock %}

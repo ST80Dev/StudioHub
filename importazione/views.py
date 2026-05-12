@@ -10,6 +10,7 @@ from django.views.decorators.http import require_POST
 
 from anagrafica.models import Anagrafica
 
+from .apply import preview_apply, run_apply
 from .fields import (
     ANAGRAFICA_FIELDS_GROUPS,
     EXTRA_SUGGESTED,
@@ -320,6 +321,46 @@ def anagrafica_search(request):
             for a in qs
         ]
     })
+
+
+@login_required
+def session_apply_preview(request, pk: int):
+    """Pagina di anteprima dell'apply: mostra cosa succederà, evidenzia bloccanti."""
+    sessione = get_object_or_404(ImportSession, pk=pk)
+    p = preview_apply(sessione)
+    return render(
+        request,
+        "importazione/session_apply.html",
+        {"sessione": sessione, "preview": p},
+    )
+
+
+@login_required
+@require_POST
+def session_apply_run(request, pk: int):
+    """Esegue l'apply (atomico per riga). Aggiorna stato + riepilogo."""
+    sessione = get_object_or_404(ImportSession, pk=pk)
+    p = preview_apply(sessione)
+    if p.ha_bloccanti:
+        for b in p.blocchi:
+            messages.error(request, b)
+        return redirect("importazione:apply_preview", pk=pk)
+
+    stats = run_apply(sessione)
+    if stats.errori:
+        messages.warning(
+            request,
+            f"Apply completato con {stats.errori} errori. "
+            f"Create: {stats.create}, Aggiornate: {stats.update}, Skip: {stats.skip}.",
+        )
+    else:
+        messages.success(
+            request,
+            f"Apply completato. Create: {stats.create}, "
+            f"Aggiornate: {stats.update}, Skip: {stats.skip}, "
+            f"Dati importati: {stats.dati_importati}, Alias: {stats.alias_creati}.",
+        )
+    return redirect("importazione:detail", pk=pk)
 
 
 @login_required
