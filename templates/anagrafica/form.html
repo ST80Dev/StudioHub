@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+
+{% block title %}Modifica {{ cliente.denominazione }} — Clienti{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+  <header class="mb-4">
+    <nav class="text-xs text-slate-500 mb-1">
+      <a href="{% url 'anagrafica:list' %}" class="hover:underline">Clienti</a>
+      <span aria-hidden="true">›</span>
+      <a href="{% url 'anagrafica:detail' cliente.pk %}" class="hover:underline">{{ cliente.denominazione }}</a>
+      <span aria-hidden="true">›</span>
+      <span>Modifica</span>
+    </nav>
+    <h1 class="text-xl font-semibold">Modifica anagrafica</h1>
+    <p class="text-sm text-slate-500">
+      Codice interno: <code>{{ cliente.codice_interno }}</code>
+    </p>
+  </header>
+
+  {% if messages %}
+    {% for m in messages %}
+      <div class="mb-3 rounded border px-3 py-2 text-sm
+                  {% if m.tags == 'error' %}border-red-200 bg-red-50 text-red-800
+                  {% elif m.tags == 'success' %}border-emerald-200 bg-emerald-50 text-emerald-800
+                  {% else %}border-slate-200 bg-slate-50 text-slate-800{% endif %}">{{ m }}</div>
+    {% endfor %}
+  {% endif %}
+
+  <form method="post" class="space-y-4">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+      <div class="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+        {{ form.non_field_errors }}
+      </div>
+    {% endif %}
+
+    <fieldset class="rounded border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
+      <legend class="px-2 text-xs uppercase text-slate-500">Identificativi</legend>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        {% include "anagrafica/_form_field.html" with f=form.codice_interno %}
+        {% include "anagrafica/_form_field.html" with f=form.tipo_soggetto %}
+        {% include "anagrafica/_form_field.html" with f=form.stato %}
+        {% include "anagrafica/_form_field.html" with f=form.codice_cli %}
+        {% include "anagrafica/_form_field.html" with f=form.codice_multi %}
+        {% include "anagrafica/_form_field.html" with f=form.codice_gstudio %}
+        {% include "anagrafica/_form_field.html" with f=form.codice_fiscale %}
+        {% include "anagrafica/_form_field.html" with f=form.partita_iva %}
+      </div>
+    </fieldset>
+
+    <fieldset class="rounded border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
+      <legend class="px-2 text-xs uppercase text-slate-500">Denominazione</legend>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div class="md:col-span-3">
+          {% include "anagrafica/_form_field.html" with f=form.denominazione %}
+        </div>
+        {% include "anagrafica/_form_field.html" with f=form.cognome %}
+        {% include "anagrafica/_form_field.html" with f=form.nome %}
+        {% include "anagrafica/_form_field.html" with f=form.email %}
+      </div>
+    </fieldset>
+
+    <fieldset class="rounded border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
+      <legend class="px-2 text-xs uppercase text-slate-500">Indirizzo</legend>
+      <div class="grid grid-cols-1 md:grid-cols-6 gap-3">
+        <div class="md:col-span-4">
+          {% include "anagrafica/_form_field.html" with f=form.indirizzo_via %}
+        </div>
+        <div class="md:col-span-2">
+          {% include "anagrafica/_form_field.html" with f=form.indirizzo_civico %}
+        </div>
+        <div class="md:col-span-1">
+          {% include "anagrafica/_form_field.html" with f=form.indirizzo_cap %}
+        </div>
+        <div class="md:col-span-3">
+          {% include "anagrafica/_form_field.html" with f=form.indirizzo_comune %}
+        </div>
+        <div class="md:col-span-1">
+          {% include "anagrafica/_form_field.html" with f=form.indirizzo_provincia %}
+        </div>
+        <div class="md:col-span-1">
+          {% include "anagrafica/_form_field.html" with f=form.indirizzo_nazione %}
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset class="rounded border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
+      <legend class="px-2 text-xs uppercase text-slate-500">Fiscale</legend>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        {% include "anagrafica/_form_field.html" with f=form.regime_contabile %}
+        {% include "anagrafica/_form_field.html" with f=form.periodicita_iva %}
+        {% include "anagrafica/_form_field.html" with f=form.contabilita %}
+        {% include "anagrafica/_form_field.html" with f=form.categoria_professione %}
+        {% include "anagrafica/_form_field.html" with f=form.data_fine_esercizio %}
+        {% include "anagrafica/_form_field.html" with f=form.peso_contabilita %}
+        <label class="flex items-center gap-2 text-sm">
+          {{ form.sostituto_imposta }} Sostituto d'imposta
+        </label>
+        <label class="flex items-center gap-2 text-sm">
+          {{ form.iscritto_cciaa }} Iscritto CCIAA
+        </label>
+      </div>
+    </fieldset>
+
+    <fieldset class="rounded border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
+      <legend class="px-2 text-xs uppercase text-slate-500">Mandato e note</legend>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {% include "anagrafica/_form_field.html" with f=form.data_inizio_mandato %}
+        {% include "anagrafica/_form_field.html" with f=form.data_fine_mandato %}
+        <div class="md:col-span-2">
+          {% include "anagrafica/_form_field.html" with f=form.note %}
+        </div>
+      </div>
+    </fieldset>
+
+    <div class="flex items-center justify-end gap-2 sticky bottom-0 bg-slate-50 dark:bg-slate-950 py-2">
+      <a href="{% url 'anagrafica:detail' cliente.pk %}"
+         class="text-sm text-slate-600 hover:underline">Annulla</a>
+      <button type="submit"
+              class="rounded bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
+        Salva modifiche
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}
