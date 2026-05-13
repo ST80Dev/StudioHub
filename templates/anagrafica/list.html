@@ -11,7 +11,8 @@
             <span class="opacity-70">clic su una cella per modificarla · clic su un'intestazione per ordinare</span>
         </p>
     </div>
-    <div class="flex items-center gap-2">
+    <div class="flex items-center gap-3">
+        {% include "partials/_paginator.html" with page_obj=page_obj %}
         <a href="/admin/anagrafica/anagrafica/add/"
            class="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
             + Nuovo cliente

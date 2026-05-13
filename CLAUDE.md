@@ -43,6 +43,9 @@ riferimento:
 - Render con `{% include "partials/_paginator.html" with page_obj=page_obj %}`
   (il partial è generico, preserva tutti i query param correnti e supporta
   prev/next + salto rapido a pagina N).
+- **Sempre due posizionamenti**: in alto a destra (accanto al titolo o alle
+  azioni primarie tipo "+ Nuovo") e in fondo alla tabella. Così l'utente
+  non deve scorrere a fine pagina per cambiare pagina.
 - La view deve passare `page_obj` (alias di `page`) al contesto.
 
 ### Filtri per colonna (sotto le intestazioni)
