@@ -12,6 +12,10 @@
       <span class="rounded bg-slate-100 text-slate-700 px-1.5 py-0.5">skip</span>
     {% elif r.decisione == ImportRowDecisione.ERRORE %}
       <span class="rounded bg-red-100 text-red-800 px-1.5 py-0.5">err</span>
+      {% if r.messaggio_errore %}
+        <span class="mt-0.5 block max-w-[260px] truncate text-[10px] text-red-700"
+              title="{{ r.messaggio_errore }}">{{ r.messaggio_errore }}</span>
+      {% endif %}
     {% else %}
       <span class="rounded bg-amber-100 text-amber-800 px-1.5 py-0.5">pending</span>
     {% endif %}
