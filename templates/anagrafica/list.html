@@ -5,7 +5,7 @@
 <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
     <div>
         <h1 class="text-lg font-semibold">Clienti</h1>
-        <p class="text-xs text-slate-500">{{ totale }} risultati</p>
+        <p class="text-xs text-slate-500">{{ totale }} risultati · <span class="opacity-70">clic su una cella per modificarla</span></p>
     </div>
     <div class="flex items-center gap-2">
         <a href="/admin/anagrafica/anagrafica/add/"
@@ -69,8 +69,10 @@
         </select>
         <span class="text-xs text-slate-500">→</span>
 
-        {# Un <select name="value"> per campo: solo quello attivo non e' disabled,
-           cosi' solo il suo valore viene inviato. #}
+        {% comment %}
+        Un <select name="value"> per campo: solo quello attivo non e' disabled,
+        cosi' solo il suo valore viene inviato al server.
+        {% endcomment %}
         <select name="value" x-show="field === 'tipo_soggetto'" :disabled="field !== 'tipo_soggetto'"
                 class="rounded-md border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-800">
             {% for val, lbl in tipi_soggetto %}<option value="{{ val }}">{{ lbl }}</option>{% endfor %}

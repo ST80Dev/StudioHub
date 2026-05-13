@@ -3,23 +3,16 @@
     <td class="px-2">
         <input type="checkbox" name="ids" value="{{ c.pk }}" class="bulk-check">
     </td>
-    <td class="px-3 font-mono text-xs">{{ c.codice_interno }}</td>
+    {% include "anagrafica/_cell_display.html" with c=c field="codice_interno" %}
     <td class="px-3">
         <a href="{{ c.get_absolute_url }}" class="font-medium hover:underline">{{ c.denominazione }}</a>
     </td>
-    <td class="px-3">
-        <span class="inline-flex rounded bg-slate-100 px-1.5 text-[11px] font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-300">{{ c.tipo_soggetto }}</span>
-    </td>
-    <td class="px-3 font-mono text-xs">{{ c.codice_fiscale|default:"—" }}</td>
-    <td class="px-3 font-mono text-xs">{{ c.partita_iva|default:"—" }}</td>
-    <td class="px-3 text-xs">{{ c.get_regime_contabile_display|default:"—" }}</td>
-    <td class="px-3 text-xs">{{ c.get_periodicita_iva_display|default:"—" }}</td>
-    <td class="px-3">
-        {% if c.stato == 'attivo' %}<span class="sh-state sh-state-done">Attivo</span>
-        {% elif c.stato == 'sospeso' %}<span class="sh-state sh-state-wip">Sospeso</span>
-        {% else %}<span class="sh-state sh-state-idle">{{ c.get_stato_display }}</span>
-        {% endif %}
-    </td>
+    {% include "anagrafica/_cell_display.html" with c=c field="tipo_soggetto" %}
+    {% include "anagrafica/_cell_display.html" with c=c field="codice_fiscale" %}
+    {% include "anagrafica/_cell_display.html" with c=c field="partita_iva" %}
+    {% include "anagrafica/_cell_display.html" with c=c field="regime_contabile" %}
+    {% include "anagrafica/_cell_display.html" with c=c field="periodicita_iva" %}
+    {% include "anagrafica/_cell_display.html" with c=c field="stato" %}
     <td class="px-3 text-right">
         <a href="{% url 'anagrafica:edit' c.pk %}"
            class="text-[11px] text-brand-700 hover:underline">Modifica</a>
