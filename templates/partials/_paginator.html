@@ -1,0 +1,53 @@
+{% comment %}
+Paginator riusabile per tutte le tabelle/liste del progetto.
+
+Uso:
+    {% include "partials/_paginator.html" with page_obj=page_obj %}
+
+Preserva tutti i query param correnti (filtri, sort, ricerca) cambiando solo
+il parametro `page`. Mostra prev/next, numero pagina corrente, totale pagine,
+e un input "salta a pagina" per le liste lunghe.
+
+Pattern UI standard: vedi CLAUDE.md sezione "Pattern UI per liste/tabelle".
+{% endcomment %}
+{% if page_obj.paginator.num_pages > 1 %}
+<nav class="flex items-center gap-1 text-xs">
+  {% if page_obj.has_previous %}
+    <a href="?{% for k, v in request.GET.items %}{% if k != 'page' %}{{ k }}={{ v }}&{% endif %}{% endfor %}page=1"
+       class="rounded border border-slate-200 px-2 py-0.5 hover:bg-slate-50 dark:border-slate-700"
+       title="Prima pagina">«</a>
+    <a href="?{% for k, v in request.GET.items %}{% if k != 'page' %}{{ k }}={{ v }}&{% endif %}{% endfor %}page={{ page_obj.previous_page_number }}"
+       class="rounded border border-slate-200 px-2 py-0.5 hover:bg-slate-50 dark:border-slate-700">‹ Prec.</a>
+  {% else %}
+    <span class="rounded border border-slate-200 px-2 py-0.5 text-slate-300 dark:border-slate-800">«</span>
+    <span class="rounded border border-slate-200 px-2 py-0.5 text-slate-300 dark:border-slate-800">‹ Prec.</span>
+  {% endif %}
+
+  <span class="px-2 text-slate-500">
+    Pagina <strong>{{ page_obj.number }}</strong> di {{ page_obj.paginator.num_pages }}
+    <span class="text-slate-400">· {{ page_obj.paginator.count }} totali</span>
+  </span>
+
+  {% if page_obj.has_next %}
+    <a href="?{% for k, v in request.GET.items %}{% if k != 'page' %}{{ k }}={{ v }}&{% endif %}{% endfor %}page={{ page_obj.next_page_number }}"
+       class="rounded border border-slate-200 px-2 py-0.5 hover:bg-slate-50 dark:border-slate-700">Succ. ›</a>
+    <a href="?{% for k, v in request.GET.items %}{% if k != 'page' %}{{ k }}={{ v }}&{% endif %}{% endfor %}page={{ page_obj.paginator.num_pages }}"
+       class="rounded border border-slate-200 px-2 py-0.5 hover:bg-slate-50 dark:border-slate-700"
+       title="Ultima pagina">»</a>
+  {% else %}
+    <span class="rounded border border-slate-200 px-2 py-0.5 text-slate-300 dark:border-slate-800">Succ. ›</span>
+    <span class="rounded border border-slate-200 px-2 py-0.5 text-slate-300 dark:border-slate-800">»</span>
+  {% endif %}
+
+  {% if page_obj.paginator.num_pages > 5 %}
+  <form method="get" class="ml-2 flex items-center gap-1 text-xs">
+    {% for k, v in request.GET.items %}{% if k != 'page' %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endif %}{% endfor %}
+    <label class="text-slate-400">Vai a:</label>
+    <input type="number" name="page" min="1" max="{{ page_obj.paginator.num_pages }}"
+           value="{{ page_obj.number }}"
+           class="w-16 rounded border-slate-300 px-1 py-0.5 text-xs dark:bg-slate-800 dark:border-slate-700">
+    <button type="submit" class="rounded border border-slate-200 px-2 py-0.5 hover:bg-slate-50 dark:border-slate-700">↵</button>
+  </form>
+  {% endif %}
+</nav>
+{% endif %}

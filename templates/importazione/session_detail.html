@@ -127,7 +127,7 @@
         di {{ totale_filtrato }}
         {% if decisione_filter %}<span class="text-xs font-normal text-slate-500">(filtrate)</span>{% endif %}
       </span>
-      {% include "importazione/_paginator.html" with page_obj=page_obj %}
+      {% include "partials/_paginator.html" with page_obj=page_obj %}
     </div>
 
     {# Scrollbar orizzontale "ghost" in alto, sincronizzato con la tabella sotto. #}
@@ -160,7 +160,7 @@
     </div>
 
     <div class="px-3 py-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end">
-      {% include "importazione/_paginator.html" with page_obj=page_obj %}
+      {% include "partials/_paginator.html" with page_obj=page_obj %}
     </div>
   </section>
 
