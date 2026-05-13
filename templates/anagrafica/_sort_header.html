@@ -1,0 +1,18 @@
+{% comment %}
+Header di colonna cliccabile per ordinamento.
+Parametri: `label` (testo), `field` (chiave sort whitelistata server-side).
+Toggla asc/desc cliccando di nuovo sulla stessa colonna; preserva tutti
+gli altri query param.
+{% endcomment %}
+<th class="px-3 py-1">
+  <a class="inline-flex items-center gap-1 hover:text-slate-800 dark:hover:text-slate-100"
+     href="?{% for k, v in request.GET.items %}{% if k != 'sort' and k != 'page' %}{{ k }}={{ v }}&{% endif %}{% endfor %}sort={% if sort == field %}-{{ field }}{% else %}{{ field }}{% endif %}">
+    <span>{{ label }}</span>
+    {% if sort_field == field %}
+      {% if sort_dir == "asc" %}<span class="text-brand-700">↑</span>
+      {% else %}<span class="text-brand-700">↓</span>{% endif %}
+    {% else %}
+      <span class="text-slate-300">↕</span>
+    {% endif %}
+  </a>
+</th>

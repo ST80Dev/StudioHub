@@ -20,9 +20,17 @@ from .models import (
 
 @login_required
 def lista_clienti(request):
-    """Lista densa dei clienti, con ricerca libera e filtri rapidi."""
+    """Lista densa dei clienti, con ricerca libera, filtri per colonna,
+    ordinamento per colonna e paginazione.
+
+    Pattern UI standard (vedi CLAUDE.md "Pattern UI per liste/tabelle"):
+    - paginazione server-side (50/pagina) con partial `_paginator.html`
+    - filtri per colonna come query string GET (whitelistati)
+    - ordinamento `?sort=<field>` o `?sort=-<field>` con whitelist server-side
+    """
     queryset = Anagrafica.objects.filter(is_deleted=False)
 
+    # Ricerca libera generale (resta per retrocompatibilità: dal pulsante "Filtra")
     q = request.GET.get("q", "").strip()
     if q:
         queryset = queryset.filter(
@@ -32,29 +40,80 @@ def lista_clienti(request):
             | Q(partita_iva__icontains=q)
         )
 
-    tipo = request.GET.get("tipo", "")
-    if tipo in TipoSoggetto.values:
-        queryset = queryset.filter(tipo_soggetto=tipo)
+    # Filtri per colonna. Mappa nome_query -> (lookup ORM, tipo).
+    # tipo: "text" -> icontains; "exact" -> exact (per choices/select).
+    filter_text = {
+        "f_codice": "codice_interno__icontains",
+        "f_denominazione": "denominazione__icontains",
+        "f_cf": "codice_fiscale__icontains",
+        "f_piva": "partita_iva__icontains",
+    }
+    for qkey, lookup in filter_text.items():
+        v = (request.GET.get(qkey) or "").strip()
+        if v:
+            queryset = queryset.filter(**{lookup: v})
 
-    stato = request.GET.get("stato", "")
-    if stato in StatoAnagrafica.values:
-        queryset = queryset.filter(stato=stato)
+    # Filtri per choices: usano la query-key del campo direttamente (back-compat con `tipo`/`stato`).
+    f_tipo = request.GET.get("f_tipo") or request.GET.get("tipo") or ""
+    if f_tipo in TipoSoggetto.values:
+        queryset = queryset.filter(tipo_soggetto=f_tipo)
 
-    paginator = Paginator(queryset.order_by("denominazione"), 50)
+    f_stato = request.GET.get("f_stato") or request.GET.get("stato") or ""
+    if f_stato in StatoAnagrafica.values:
+        queryset = queryset.filter(stato=f_stato)
+
+    f_regime = request.GET.get("f_regime", "")
+    if f_regime in RegimeContabile.values:
+        queryset = queryset.filter(regime_contabile=f_regime)
+
+    f_iva = request.GET.get("f_iva", "")
+    if f_iva in PeriodicitaIVA.values:
+        queryset = queryset.filter(periodicita_iva=f_iva)
+
+    # Ordinamento. Whitelist dei campi sortabili (sicurezza: no order_by
+    # su qualsiasi attributo, evita raw SQL injection di lookup esotici).
+    SORTABLE = {
+        "codice_interno", "denominazione", "tipo_soggetto",
+        "codice_fiscale", "partita_iva", "regime_contabile",
+        "periodicita_iva", "stato",
+    }
+    sort = request.GET.get("sort", "denominazione")
+    sort_field = sort.lstrip("-")
+    if sort_field not in SORTABLE:
+        sort = "denominazione"
+        sort_field = "denominazione"
+
+    paginator = Paginator(queryset.order_by(sort, "denominazione"), 50)
     page = paginator.get_page(request.GET.get("page"))
 
     context = {
         "page": page,
+        "page_obj": page,  # alias per il partial _paginator.html
         "clienti": page.object_list,
         "q": q,
-        "tipo": tipo,
-        "stato": stato,
+        # filtri correnti (per i widget di header)
+        "f_codice": request.GET.get("f_codice", ""),
+        "f_denominazione": request.GET.get("f_denominazione", ""),
+        "f_cf": request.GET.get("f_cf", ""),
+        "f_piva": request.GET.get("f_piva", ""),
+        "f_tipo": f_tipo,
+        "f_stato": f_stato,
+        "f_regime": f_regime,
+        "f_iva": f_iva,
+        # back-compat (sidebar/altri callers che ancora usano i nomi vecchi)
+        "tipo": f_tipo,
+        "stato": f_stato,
+        # opzioni dei select
         "tipi_soggetto": TipoSoggetto.choices,
         "stati": StatoAnagrafica.choices,
         "regimi": RegimeContabile.choices,
         "periodicita": PeriodicitaIVA.choices,
         "contabilita_choices": GestioneContabilita.choices,
         "totale": paginator.count,
+        # sort corrente per indicatori UI
+        "sort": sort,
+        "sort_field": sort_field,
+        "sort_dir": "desc" if sort.startswith("-") else "asc",
     }
     template = (
         "anagrafica/_list_rows.html" if request.htmx else "anagrafica/list.html"
