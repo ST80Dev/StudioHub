@@ -151,3 +151,107 @@ def bulk_update(request):
     # Ritorna alla lista preservando filtri/ricerca correnti.
     qs = request.POST.get("qs", "")
     return redirect(reverse("anagrafica:list") + ("?" + qs if qs else ""))
+
+
+# ---------------------------------------------------------------------------
+# Inline edit (cella per cella) dalla tabella
+# ---------------------------------------------------------------------------
+#
+# Pattern click-to-edit con HTMX:
+#  1. il <td> in modalità display ha hx-get verso `inline_edit_form` con
+#     trigger=click. Restituisce il <td> in modalità "edit".
+#  2. il form in modalità edit ha hx-post verso `inline_save` con
+#     trigger=change. Salva e restituisce il <td> tornato in modalità display.
+#  3. l'utente puo' premere Esc per annullare (gestito client-side: il piccolo
+#     listener globale rimette il valore originale).
+#
+# Whitelist `_INLINE_FIELDS` controlla quali campi sono modificabili e con
+# quale widget. Aggiungere/togliere campi qui basta a estendere o restringere
+# la feature, senza toccare il template.
+
+# Tipo widget per campo. "select" usa le choices Django; "text" usa <input
+# type=text>; "date" usa <input type=date>; "number" usa <input type=number>.
+_INLINE_FIELDS = {
+    "codice_interno":    ("text",   None),
+    "codice_cli":        ("text",   None),
+    "codice_multi":      ("text",   None),
+    "codice_gstudio":    ("text",   None),
+    "codice_fiscale":    ("text",   None),
+    "partita_iva":       ("text",   None),
+    "email":             ("text",   None),
+    "tipo_soggetto":     ("select", TipoSoggetto),
+    "stato":             ("select", StatoAnagrafica),
+    "regime_contabile":  ("select", RegimeContabile),
+    "periodicita_iva":   ("select", PeriodicitaIVA),
+    "contabilita":       ("select", GestioneContabilita),
+    "data_inizio_mandato": ("date", None),
+    "data_fine_mandato":   ("date", None),
+}
+
+
+def _inline_field_meta(field: str):
+    if field not in _INLINE_FIELDS:
+        return None
+    widget, choices = _INLINE_FIELDS[field]
+    return {"name": field, "widget": widget, "choices": choices}
+
+
+def _render_cell_display(request, cliente, field: str):
+    return render(
+        request,
+        "anagrafica/_cell_display.html",
+        {"c": cliente, "field": field},
+    )
+
+
+@login_required
+def inline_edit_form(request, pk: int, field: str):
+    """GET: ritorna il <td> in modalità edit (input/select) per il campo."""
+    meta = _inline_field_meta(field)
+    if not meta:
+        return HttpResponseBadRequest("Campo non ammesso per l'edit inline.")
+    cliente = get_object_or_404(Anagrafica, pk=pk, is_deleted=False)
+    return render(
+        request,
+        "anagrafica/_cell_edit.html",
+        {"c": cliente, "field": field, "meta": meta},
+    )
+
+
+@login_required
+@require_POST
+def inline_save(request, pk: int, field: str):
+    """POST: salva il nuovo valore e ritorna il <td> in modalità display."""
+    meta = _inline_field_meta(field)
+    if not meta:
+        return HttpResponseBadRequest("Campo non ammesso per l'edit inline.")
+    cliente = get_object_or_404(Anagrafica, pk=pk, is_deleted=False)
+    raw = (request.POST.get("value") or "").strip()
+
+    # Normalizzazione e validazione minima per widget.
+    if meta["widget"] == "select":
+        choices = meta["choices"]
+        if raw and raw not in choices.values:
+            return HttpResponseBadRequest("Valore non ammesso per il campo.")
+    elif meta["widget"] == "date":
+        # accetta input HTML5 type=date (YYYY-MM-DD) o vuoto
+        if raw and len(raw) != 10:
+            return HttpResponseBadRequest("Data non valida.")
+
+    # Campi speciali: normalizzazione coerente con il form
+    if field == "codice_fiscale":
+        raw = raw.upper()
+
+    # Per campi unique (codice_cli) controlliamo i conflitti per evitare 500.
+    if field == "codice_cli" and raw:
+        conflict = Anagrafica.objects.filter(codice_cli=raw).exclude(pk=cliente.pk).exists()
+        if conflict:
+            return HttpResponseBadRequest("Codice CLI già usato da un'altra anagrafica.")
+
+    # `null=True` solo su codice_cli; gli altri sono `blank=True` senza null.
+    if field == "codice_cli" and raw == "":
+        setattr(cliente, field, None)
+    else:
+        setattr(cliente, field, raw)
+    cliente.save(update_fields=[field, "updated_at"])
+    return _render_cell_display(request, cliente, field)
