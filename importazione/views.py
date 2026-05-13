@@ -249,6 +249,40 @@ def session_run_matching(request, pk: int):
 
 @login_required
 @require_POST
+def session_bulk_decisione(request, pk: int):
+    """Bulk: cambia la decisione di tutte le righe della sessione che hanno
+    una certa decisione di partenza. Tipico use-case: re-import dello stesso
+    file, dove l'utente vuole "saltare" le righe gia' matchate (AUTO_MATCH ->
+    SKIP) per lavorare solo sulle PENDING residue.
+
+    POST: from_decisione, to_decisione (entrambi in ImportRowDecisione).
+    """
+    sessione = get_object_or_404(ImportSession, pk=pk)
+    valid = {c.value for c in ImportRowDecisione}
+    from_d = (request.POST.get("from_decisione") or "").strip()
+    to_d = (request.POST.get("to_decisione") or "").strip()
+    if from_d not in valid or to_d not in valid:
+        return HttpResponse("Decisione non valida", status=400)
+    if from_d == to_d:
+        messages.info(request, "Origine e destinazione coincidono: nessun cambiamento.")
+        return redirect("importazione:detail", pk=pk)
+
+    updated = sessione.righe.filter(decisione=from_d).update(decisione=to_d)
+    if updated:
+        messages.success(
+            request,
+            f"Aggiornate {updated} righe: decisione '{from_d}' → '{to_d}'.",
+        )
+    else:
+        messages.warning(
+            request,
+            f"Nessuna riga in stato '{from_d}': niente da aggiornare.",
+        )
+    return redirect("importazione:detail", pk=pk)
+
+
+@login_required
+@require_POST
 def row_update(request, pk: int):
     """Aggiorna decisione + anagrafica_match di una riga.
 

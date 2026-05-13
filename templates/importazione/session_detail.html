@@ -105,6 +105,36 @@
       {% for k, v in sessione.riepilogo.match_stats.metodi.items %}{{ k }}={{ v }}{% if not forloop.last %} · {% endif %}{% endfor %}
     </p>
     {% endif %}
+    {# Bulk decisione: utile per re-import (saltare le AUTO_MATCH gia' applicate). #}
+    <form method="post" action="{% url 'importazione:bulk_decisione' sessione.pk %}"
+          class="mt-2 flex flex-wrap items-center gap-1 text-xs">
+      {% csrf_token %}
+      <span class="text-slate-500">Bulk decisione:</span>
+      <span class="text-slate-400">da</span>
+      <select name="from_decisione" class="rounded border-slate-300 text-xs px-1.5 py-0.5 dark:bg-slate-800 dark:border-slate-700">
+        <option value="auto_match">auto-match ({{ counts.auto_match }})</option>
+        <option value="pending">pending ({{ counts.pending }})</option>
+        <option value="confermato">confermate ({{ counts.confermato }})</option>
+        <option value="nuova">nuove ({{ counts.nuova }})</option>
+        <option value="skip">skip ({{ counts.skip }})</option>
+        <option value="errore">errore</option>
+      </select>
+      <span class="text-slate-400">→ a</span>
+      <select name="to_decisione" class="rounded border-slate-300 text-xs px-1.5 py-0.5 dark:bg-slate-800 dark:border-slate-700">
+        <option value="skip">skip (salta all'apply)</option>
+        <option value="confermato">confermato (applica match)</option>
+        <option value="pending">pending (rimetti in revisione)</option>
+        <option value="nuova">nuova (crea anagrafica)</option>
+      </select>
+      <button type="submit"
+              onclick="return confirm('Cambiare la decisione di tutte le righe selezionate? L\'azione è reversibile rifacendo la rotta inversa.')"
+              class="rounded bg-amber-600 px-2 py-0.5 text-white hover:bg-amber-700">
+        Applica
+      </button>
+      <span class="ml-2 text-[11px] text-slate-400">
+        Re-import: "da auto-match → a skip" per applicare solo le righe nuove/in errore.
+      </span>
+    </form>
     {% if sessione.riepilogo.apply_stats %}
     <p class="mt-2 text-xs text-emerald-700">
       Ultimo apply ({{ sessione.applied_at|date:"d/m/Y H:i" }}):
