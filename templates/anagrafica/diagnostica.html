@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{% block title %}Diagnostica anagrafiche — StudioHub{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto">
+  <header class="mb-4">
+    <nav class="text-xs text-slate-500 mb-1">
+      <a href="{% url 'anagrafica:list' %}" class="hover:underline">Clienti</a>
+      <span aria-hidden="true">›</span>
+      <span>Diagnostica</span>
+    </nav>
+    <h1 class="text-xl font-semibold">Diagnostica campi a scelta multipla</h1>
+    <p class="text-sm text-slate-500">
+      Per ogni campo a choices, distribuzione dei valori effettivi nel DB
+      sui <strong>{{ totale }}</strong> clienti attivi. I valori
+      <span class="rounded bg-red-100 px-1 text-red-800">non canonici</span>
+      (residui da import o errori passati) possono essere rimappati in massa
+      verso un valore canonico.
+    </p>
+    <p class="mt-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded p-2">
+      ⚠ La rimappa <strong>sovrascrive</strong> il valore originale per tutti i
+      record interessati e non è reversibile. Se ti serve conservare la
+      semantica originale (es. <code>cassa_reg</code> diverso da <code>semplificato</code>),
+      considera prima di estendere le choices del modello (richiede una migration).
+    </p>
+  </header>
+
+  {% if messages %}
+    {% for m in messages %}
+      <div class="mb-3 rounded border px-3 py-2 text-sm
+                  {% if m.tags == 'error' %}border-red-200 bg-red-50 text-red-800
+                  {% elif m.tags == 'warning' %}border-amber-200 bg-amber-50 text-amber-800
+                  {% elif m.tags == 'success' %}border-emerald-200 bg-emerald-50 text-emerald-800
+                  {% else %}border-slate-200 bg-slate-50 text-slate-800{% endif %}">{{ m }}</div>
+    {% endfor %}
+  {% endif %}
+
+  {% for sezione in sezioni %}
+  <section class="mb-5 rounded border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+    <div class="px-3 py-2 border-b border-slate-100 dark:border-slate-800 text-sm font-semibold">
+      {{ sezione.label }} <span class="text-xs font-normal text-slate-500">({{ sezione.field }})</span>
+    </div>
+    <table class="min-w-full text-sm">
+      <thead class="bg-slate-50 dark:bg-slate-800/40 text-left text-[11px] uppercase text-slate-500">
+        <tr>
+          <th class="px-3 py-1.5 w-1/3">Valore in DB</th>
+          <th class="px-3 py-1.5 w-1/4">Conteggio</th>
+          <th class="px-3 py-1.5 w-1/3">Rimappa verso</th>
+          <th class="px-3 py-1.5"></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+        {% for r in sezione.rows %}
+        <tr>
+          <td class="px-3 py-1.5">
+            {% if r.canonico %}
+              <span class="font-mono text-xs">{{ r.value|default:"(vuoto)" }}</span>
+              <span class="text-xs text-slate-500">— {{ r.label }}</span>
+            {% else %}
+              <span class="font-mono text-xs rounded bg-red-100 text-red-800 px-1.5 py-0.5">{{ r.value|default:"(vuoto)" }}</span>
+            {% endif %}
+          </td>
+          <td class="px-3 py-1.5">{{ r.count }}</td>
+          <td class="px-3 py-1.5">
+            {% if not r.canonico %}
+            <form method="post" action="{% url 'anagrafica:diagnostica_remap' %}" class="flex items-center gap-1">
+              {% csrf_token %}
+              <input type="hidden" name="field" value="{{ sezione.field }}">
+              <input type="hidden" name="from_value" value="{{ r.value }}">
+              <select name="to_value"
+                      class="rounded border-slate-300 text-xs px-2 py-1 dark:bg-slate-800 dark:border-slate-700">
+                {% for val, lbl in sezione.choices %}<option value="{{ val }}">{{ lbl }} — {{ val }}</option>{% endfor %}
+              </select>
+              <button type="submit"
+                      onclick="return confirm('Rimappare {{ r.count }} record da \'{{ r.value }}\' al valore selezionato? L\'operazione è irreversibile.')"
+                      class="rounded bg-red-600 px-2 py-1 text-xs text-white hover:bg-red-700">
+                Rimappa {{ r.count }} →
+              </button>
+            </form>
+            {% else %}
+              <span class="text-xs text-slate-400">—</span>
+            {% endif %}
+          </td>
+          <td class="px-3 py-1.5"></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% endfor %}
+</div>
+{% endblock %}
