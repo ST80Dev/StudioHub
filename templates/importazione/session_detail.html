@@ -80,6 +80,9 @@
         <a href="?decisione=skip" class="rounded border px-2 py-0.5 {% if decisione_filter == 'skip' %}border-slate-500 text-slate-700{% else %}border-slate-200{% endif %}">
           Saltate ({{ counts.skip }})
         </a>
+        <a href="?decisione=errore" class="rounded border px-2 py-0.5 {% if decisione_filter == 'errore' %}border-red-500 text-red-700{% else %}border-slate-200{% endif %}">
+          Errori ({{ counts.errore }})
+        </a>
       </div>
       <div class="flex items-center gap-2">
         <form method="post" action="{% url 'importazione:run_matching' sessione.pk %}">
@@ -147,6 +150,23 @@
         · <span class="text-red-700"><strong>{{ sessione.riepilogo.apply_stats.errori }}</strong> errori</span>
       {% endif %}
     </p>
+    {% if sessione.riepilogo.apply_stats.dettagli_errori %}
+      <details class="mt-1 text-xs">
+        <summary class="cursor-pointer text-red-700 hover:underline">
+          Mostra dettaglio errori ({{ sessione.riepilogo.apply_stats.dettagli_errori|length }})
+        </summary>
+        <ul class="mt-1 max-h-60 overflow-y-auto list-disc pl-5 space-y-0.5 text-red-700">
+          {% for e in sessione.riepilogo.apply_stats.dettagli_errori %}
+            <li class="font-mono text-[11px]">{{ e }}</li>
+          {% endfor %}
+        </ul>
+        <p class="mt-1 text-[11px] text-slate-500">
+          Filtra le righe in errore col chip "Errori" sopra per intervenire una per una.
+          Dopo aver corretto il problema (es. mapping, valori obbligatori), cambia la decisione delle righe a "confermato" o "nuova" e rilancia <strong>Applica modifiche</strong>:
+          le righe gia' applicate non vengono toccate (la sessione conserva il contesto).
+        </p>
+      </details>
+    {% endif %}
     {% endif %}
   </section>
 
