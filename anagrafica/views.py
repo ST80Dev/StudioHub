@@ -1,7 +1,7 @@
 from django.contrib import messages
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_required, user_passes_test
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.http import HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -314,3 +314,99 @@ def inline_save(request, pk: int, field: str):
         setattr(cliente, field, raw)
     cliente.save(update_fields=[field, "updated_at"])
     return _render_cell_display(request, cliente, field)
+
+
+# ---------------------------------------------------------------------------
+# Diagnostica anagrafica (staff-only)
+# ---------------------------------------------------------------------------
+#
+# Pagina di analisi che mostra, per ogni campo a choices, la distribuzione
+# dei valori effettivamente presenti nel DB. Evidenzia i valori non canonici
+# (es. residui da import, errori passati) e permette di rimapparli in massa
+# verso un valore canonico. Riusabile per audit periodici dopo nuovi import.
+
+# Whitelist dei campi su cui si può remap. Allineata a `_BULK_FIELDS` /
+# `_INLINE_FIELDS` per coerenza.
+_DIAG_FIELDS = {
+    "tipo_soggetto":   ("Tipo soggetto",       TipoSoggetto),
+    "stato":           ("Stato",               StatoAnagrafica),
+    "regime_contabile":("Regime contabile",    RegimeContabile),
+    "periodicita_iva": ("Periodicità IVA",     PeriodicitaIVA),
+    "contabilita":     ("Tenuta contabilità",  GestioneContabilita),
+}
+
+
+def _staff_required(view):
+    return user_passes_test(lambda u: u.is_active and u.is_staff)(view)
+
+
+def _diagnose_field(field: str, choices_cls):
+    """Restituisce la lista [(valore, count, is_canonico), ...] ordinata
+    per count decrescente; i `null` vengono trattati come '' (mai distinti
+    sulle CharField del nostro modello)."""
+    valid = set(choices_cls.values)
+    rows = (
+        Anagrafica.objects.filter(is_deleted=False)
+        .values(field).annotate(n=Count("id")).order_by("-n")
+    )
+    out = []
+    for r in rows:
+        v = r[field] if r[field] is not None else ""
+        out.append({
+            "value": v,
+            "label": choices_cls(v).label if v in valid else v,
+            "count": r["n"],
+            "canonico": v in valid,
+        })
+    return out
+
+
+@login_required
+@_staff_required
+def diagnostica(request):
+    """Pagina di audit dei campi a choices dell'anagrafica."""
+    sezioni = []
+    for field, (label, cls) in _DIAG_FIELDS.items():
+        sezioni.append({
+            "field": field,
+            "label": label,
+            "choices": cls.choices,
+            "rows": _diagnose_field(field, cls),
+        })
+    totale = Anagrafica.objects.filter(is_deleted=False).count()
+    return render(
+        request,
+        "anagrafica/diagnostica.html",
+        {"sezioni": sezioni, "totale": totale},
+    )
+
+
+@login_required
+@_staff_required
+@require_POST
+def diagnostica_remap(request):
+    """Rimappa tutti i record con valore_orfano del campo verso valore_target.
+
+    POST: field, from_value, to_value. Solo campi nella whitelist, e to_value
+    deve essere fra i valori canonici delle choices.
+    """
+    field = request.POST.get("field", "")
+    from_value = request.POST.get("from_value", "")
+    to_value = request.POST.get("to_value", "")
+
+    if field not in _DIAG_FIELDS:
+        return HttpResponseBadRequest("Campo non ammesso.")
+    _, choices_cls = _DIAG_FIELDS[field]
+    if to_value not in choices_cls.values:
+        return HttpResponseBadRequest("Valore target non canonico.")
+
+    # Confronto su stringa esatta: `from_value` può essere "" per rimappare i blank.
+    updated = (
+        Anagrafica.objects.filter(is_deleted=False, **{field: from_value})
+        .update(**{field: to_value})
+    )
+    messages.success(
+        request,
+        f"Rimappati {updated} record: {field} '{from_value or '(vuoto)'}' → '{to_value}'.",
+    )
+    return redirect("anagrafica:diagnostica")
