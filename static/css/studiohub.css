@@ -36,6 +36,79 @@ table.sh-table-sticky-first thead th:first-child {
     z-index: 2;
 }
 
+/*
+ * Multi-colonna sticky a sinistra (checkbox + codice + denominazione).
+ * Le larghezze delle prime tre colonne sono fissate via CSS variables in
+ * modo che le posizioni "left" combacino con le celle reali. Lo sfondo deve
+ * essere opaco (non "inherit") perche' i <tr> non hanno background esplicito.
+ */
+table.sh-table-sticky-cols {
+    --sh-col1: 2.5rem;   /* checkbox */
+    --sh-col2: 6rem;     /* codice */
+    --sh-col3: 18rem;    /* denominazione */
+}
+table.sh-table-sticky-cols thead th:nth-child(1),
+table.sh-table-sticky-cols thead th:nth-child(2),
+table.sh-table-sticky-cols thead th:nth-child(3),
+table.sh-table-sticky-cols tbody td:nth-child(1),
+table.sh-table-sticky-cols tbody td:nth-child(2),
+table.sh-table-sticky-cols tbody td:nth-child(3) {
+    position: sticky;
+    z-index: 2;
+}
+table.sh-table-sticky-cols thead th:nth-child(1),
+table.sh-table-sticky-cols tbody td:nth-child(1) { left: 0; }
+table.sh-table-sticky-cols thead th:nth-child(2),
+table.sh-table-sticky-cols tbody td:nth-child(2) { left: var(--sh-col1); }
+table.sh-table-sticky-cols thead th:nth-child(3),
+table.sh-table-sticky-cols tbody td:nth-child(3) { left: calc(var(--sh-col1) + var(--sh-col2)); }
+
+/*
+ * Sfondo opaco per le celle sticky: ereditato dal <tr>.
+ * Le righe in _list_rows.html devono avere bg-white esplicito (e bg di
+ * hover) perche' "inherit" su td funzioni. Cosi' restano valide:
+ *   - il colore di hover di riga (slate-50)
+ *   - l'eventuale hover di cella (es. amber-50 sulle celle editabili),
+ *     che ha priorita' perche' fissa direttamente il bg del td.
+ */
+table.sh-table-sticky-cols tbody td:nth-child(1),
+table.sh-table-sticky-cols tbody td:nth-child(2),
+table.sh-table-sticky-cols tbody td:nth-child(3) {
+    background-color: inherit;
+}
+/* L'header sticky deve stare SOPRA le colonne sticky del body. */
+table.sh-table-sticky-cols thead th {
+    z-index: 3;
+}
+/* Sfondo opaco anche sulla seconda riga del thead (filtri) per le colonne sticky. */
+table.sh-table-sticky-cols thead tr:nth-child(2) th:nth-child(1),
+table.sh-table-sticky-cols thead tr:nth-child(2) th:nth-child(2),
+table.sh-table-sticky-cols thead tr:nth-child(2) th:nth-child(3) {
+    background: rgb(255 255 255);
+}
+html.dark table.sh-table-sticky-cols thead tr:nth-child(2) th:nth-child(1),
+html.dark table.sh-table-sticky-cols thead tr:nth-child(2) th:nth-child(2),
+html.dark table.sh-table-sticky-cols thead tr:nth-child(2) th:nth-child(3) {
+    background: rgb(15 23 42);
+}
+
+/*
+ * Layout "pagina che riempie il viewport": header e footer fissi,
+ * area centrale che scrolla. Usato per le liste/tabelle.
+ * Altezza = 100dvh - topbar (3rem) - padding verticale del main (1.5rem totali).
+ */
+.sh-page-fill {
+    height: calc(100dvh - 4.5rem);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+.sh-page-fill .sh-page-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+}
+
 /* Colori semantici stati (rispettosi di light/dark) */
 .sh-state {
     display: inline-flex;

@@ -3,6 +3,7 @@
 {% block title %}Clienti — StudioHub{% endblock %}
 
 {% block content %}
+<div class="sh-page-fill">
 <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
     <div>
         <h1 class="text-lg font-semibold">Clienti</h1>
@@ -51,6 +52,7 @@
 
 {# Modifica di massa. Wrappa la tabella per condividere i checkbox riga.  #}
 <form method="post" action="{% url 'anagrafica:bulk_update' %}"
+      class="flex min-h-0 flex-1 flex-col"
       x-data="{ field: 'tipo_soggetto', count: 0 }"
       x-init="document.addEventListener('change', e => {
         if (e.target.matches('.bulk-check, #bulk-check-all')) {
@@ -108,8 +110,16 @@
         </span>
     </div>
 
-    <div class="overflow-auto rounded-md border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-        <table class="sh-table sh-table-sticky-first w-full">
+    <div class="sh-page-scroll rounded-md border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+        <table class="sh-table sh-table-sticky-cols w-full">
+            {# Le tre colonne sticky a sinistra hanno larghezza fissa: deve
+               coincidere con --sh-col1/2/3 in studiohub.css per evitare
+               disallineamenti visivi durante lo scroll orizzontale. #}
+            <colgroup>
+                <col style="width:2.5rem;">
+                <col style="width:6rem;">
+                <col style="width:18rem;">
+            </colgroup>
             <thead class="bg-slate-50 dark:bg-slate-800/40">
                 {# Riga 1: titoli colonna con link di ordinamento. #}
                 <tr class="text-left text-[11px] uppercase tracking-wider text-slate-500">
@@ -168,7 +178,8 @@
     </div>
 </form>
 
-<div class="mt-3 flex items-center justify-end">
+<div class="mt-3 flex shrink-0 items-center justify-end">
     {% include "partials/_paginator.html" with page_obj=page_obj %}
 </div>
+</div>{# /sh-page-fill #}
 {% endblock %}
