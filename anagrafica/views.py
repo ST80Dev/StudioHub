@@ -60,23 +60,23 @@ def lista_clienti(request):
 
     # Filtri per choices: usano la query-key del campo direttamente (back-compat con `tipo`/`stato`).
     f_tipo = request.GET.get("f_tipo") or request.GET.get("tipo") or ""
-    if f_tipo in TipoSoggetto.values:
+    if f_tipo in _choices_labels.get_values("tipo_soggetto", include_inactive=True):
         queryset = queryset.filter(tipo_soggetto=f_tipo)
 
     f_stato = request.GET.get("f_stato") or request.GET.get("stato") or ""
-    if f_stato in StatoAnagrafica.values:
+    if f_stato in _choices_labels.get_values("stato", include_inactive=True):
         queryset = queryset.filter(stato=f_stato)
 
     f_regime = request.GET.get("f_regime", "")
-    if f_regime in RegimeContabile.values:
+    if f_regime in _choices_labels.get_values("regime_contabile", include_inactive=True):
         queryset = queryset.filter(regime_contabile=f_regime)
 
     f_iva = request.GET.get("f_iva", "")
-    if f_iva in PeriodicitaIVA.values:
+    if f_iva in _choices_labels.get_values("periodicita_iva", include_inactive=True):
         queryset = queryset.filter(periodicita_iva=f_iva)
 
     f_contab = request.GET.get("f_contab", "")
-    if f_contab in GestioneContabilita.values:
+    if f_contab in _choices_labels.get_values("contabilita", include_inactive=True):
         queryset = queryset.filter(contabilita=f_contab)
 
     # Filtro "Da completare": anagrafiche con denominazione o tipo_soggetto
@@ -271,12 +271,15 @@ def modifica_cliente(request, pk: int):
 
 # Campi su cui è permessa la modifica bulk dalla lista.
 # Solo campi a choices: evita inserimento di valori arbitrari da textbox.
+# Campi su cui e' permessa la modifica bulk dalla lista. Solo i 5 campi
+# data-driven (gestiti via TextChoiceLabel): evita inserimento di valori
+# arbitrari da textbox.
 _BULK_FIELDS = {
-    "tipo_soggetto": TipoSoggetto,
-    "stato": StatoAnagrafica,
-    "regime_contabile": RegimeContabile,
-    "periodicita_iva": PeriodicitaIVA,
-    "contabilita": GestioneContabilita,
+    "tipo_soggetto": "Tipo soggetto",
+    "stato": "Stato",
+    "regime_contabile": "Regime contabile",
+    "periodicita_iva": "Periodicità IVA",
+    "contabilita": "Tenuta contabilità",
 }
 
 
@@ -288,7 +291,8 @@ def bulk_update(request):
     POST atteso:
       - ids: lista di pk (multipla)
       - field: nome del campo (deve essere in _BULK_FIELDS)
-      - value: valore da impostare (deve essere fra i choices.values del campo)
+      - value: valore da impostare (deve essere fra i valori ATTIVI gestiti
+        da TextChoiceLabel)
     """
     field = request.POST.get("field", "")
     value = request.POST.get("value", "")
@@ -296,8 +300,7 @@ def bulk_update(request):
 
     if field not in _BULK_FIELDS:
         return HttpResponseBadRequest("Campo non ammesso per la modifica bulk.")
-    choices_cls = _BULK_FIELDS[field]
-    if value not in choices_cls.values:
+    if value not in _choices_labels.get_values(field):
         return HttpResponseBadRequest("Valore non ammesso per il campo selezionato.")
     if not ids:
         messages.warning(request, "Nessuna anagrafica selezionata.")
@@ -308,7 +311,7 @@ def bulk_update(request):
         .update(**{field: value})
     )
 
-    label = choices_cls(value).label
+    label = _choices_labels.get_label(field, value)
     field_label = {
         "tipo_soggetto": "Tipo soggetto",
         "stato": "Stato",
@@ -343,6 +346,9 @@ def bulk_update(request):
 
 # Tipo widget per campo. "select" usa le choices Django; "text" usa <input
 # type=text>; "date" usa <input type=date>; "number" usa <input type=number>.
+# Mappa nome_campo -> (widget, lookup_field_label).
+# Per widget "select" il secondo elemento e' la chiave di TextChoiceLabel
+# (es. "tipo_soggetto") usata per leggere i valori ammessi via choices_labels.
 _INLINE_FIELDS = {
     "codice_interno":    ("text",   None),
     "codice_cli":        ("text",   None),
@@ -351,11 +357,11 @@ _INLINE_FIELDS = {
     "codice_fiscale":    ("text",   None),
     "partita_iva":       ("text",   None),
     "email":             ("text",   None),
-    "tipo_soggetto":     ("select", TipoSoggetto),
-    "stato":             ("select", StatoAnagrafica),
-    "regime_contabile":  ("select", RegimeContabile),
-    "periodicita_iva":   ("select", PeriodicitaIVA),
-    "contabilita":       ("select", GestioneContabilita),
+    "tipo_soggetto":     ("select", "tipo_soggetto"),
+    "stato":             ("select", "stato"),
+    "regime_contabile":  ("select", "regime_contabile"),
+    "periodicita_iva":   ("select", "periodicita_iva"),
+    "contabilita":       ("select", "contabilita"),
     "data_inizio_mandato": ("date", None),
     "data_fine_mandato":   ("date", None),
 }
@@ -364,7 +370,10 @@ _INLINE_FIELDS = {
 def _inline_field_meta(field: str):
     if field not in _INLINE_FIELDS:
         return None
-    widget, choices = _INLINE_FIELDS[field]
+    widget, choices_field = _INLINE_FIELDS[field]
+    choices = (
+        _choices_labels.get_choices(choices_field) if widget == "select" else None
+    )
     return {"name": field, "widget": widget, "choices": choices}
 
 
@@ -402,8 +411,9 @@ def inline_save(request, pk: int, field: str):
 
     # Normalizzazione e validazione minima per widget.
     if meta["widget"] == "select":
-        choices = meta["choices"]
-        if raw and raw not in choices.values:
+        choices = meta["choices"] or []
+        valid = {c for c, _ in choices}
+        if raw and raw not in valid:
             return HttpResponseBadRequest("Valore non ammesso per il campo.")
     elif meta["widget"] == "date":
         # accetta input HTML5 type=date (YYYY-MM-DD) o vuoto
@@ -439,13 +449,15 @@ def inline_save(request, pk: int, field: str):
 # verso un valore canonico. Riusabile per audit periodici dopo nuovi import.
 
 # Whitelist dei campi su cui si può remap. Allineata a `_BULK_FIELDS` /
-# `_INLINE_FIELDS` per coerenza.
+# `_INLINE_FIELDS` per coerenza. I valori "canonici" sono quelli ATTIVI
+# in TextChoiceLabel (i codici disattivati sono considerati orfani da
+# rimappare).
 _DIAG_FIELDS = {
-    "tipo_soggetto":   ("Tipo soggetto",       TipoSoggetto),
-    "stato":           ("Stato",               StatoAnagrafica),
-    "regime_contabile":("Regime contabile",    RegimeContabile),
-    "periodicita_iva": ("Periodicità IVA",     PeriodicitaIVA),
-    "contabilita":     ("Tenuta contabilità",  GestioneContabilita),
+    "tipo_soggetto":   "Tipo soggetto",
+    "stato":           "Stato",
+    "regime_contabile":"Regime contabile",
+    "periodicita_iva": "Periodicità IVA",
+    "contabilita":     "Tenuta contabilità",
 }
 
 
@@ -453,11 +465,11 @@ def _staff_required(view):
     return user_passes_test(lambda u: u.is_active and u.is_staff)(view)
 
 
-def _diagnose_field(field: str, choices_cls):
+def _diagnose_field(field: str):
     """Restituisce la lista [(valore, count, is_canonico), ...] ordinata
     per count decrescente; i `null` vengono trattati come '' (mai distinti
-    sulle CharField del nostro modello)."""
-    valid = set(choices_cls.values)
+    sulle CharField del nostro modello). Canonico = codice ATTIVO."""
+    valid = set(_choices_labels.get_values(field))
     rows = (
         Anagrafica.objects.filter(is_deleted=False)
         .values(field).annotate(n=Count("id")).order_by("-n")
@@ -467,7 +479,7 @@ def _diagnose_field(field: str, choices_cls):
         v = r[field] if r[field] is not None else ""
         out.append({
             "value": v,
-            "label": choices_cls(v).label if v in valid else v,
+            "label": _choices_labels.get_label(field, v) if v else "",
             "count": r["n"],
             "canonico": v in valid,
         })
@@ -479,12 +491,12 @@ def _diagnose_field(field: str, choices_cls):
 def diagnostica(request):
     """Pagina di audit dei campi a choices dell'anagrafica."""
     sezioni = []
-    for field, (label, cls) in _DIAG_FIELDS.items():
+    for field, label in _DIAG_FIELDS.items():
         sezioni.append({
             "field": field,
             "label": label,
-            "choices": cls.choices,
-            "rows": _diagnose_field(field, cls),
+            "choices": _choices_labels.get_choices(field),
+            "rows": _diagnose_field(field),
         })
     totale = Anagrafica.objects.filter(is_deleted=False).count()
     return render(
@@ -501,7 +513,7 @@ def diagnostica_remap(request):
     """Rimappa tutti i record con valore_orfano del campo verso valore_target.
 
     POST: field, from_value, to_value. Solo campi nella whitelist, e to_value
-    deve essere fra i valori canonici delle choices.
+    deve essere fra i valori canonici (attivi) di TextChoiceLabel.
     """
     field = request.POST.get("field", "")
     from_value = request.POST.get("from_value", "")
@@ -509,8 +521,7 @@ def diagnostica_remap(request):
 
     if field not in _DIAG_FIELDS:
         return HttpResponseBadRequest("Campo non ammesso.")
-    _, choices_cls = _DIAG_FIELDS[field]
-    if to_value not in choices_cls.values:
+    if to_value not in _choices_labels.get_values(field):
         return HttpResponseBadRequest("Valore target non canonico.")
 
     # Confronto su stringa esatta: `from_value` può essere "" per rimappare i blank.

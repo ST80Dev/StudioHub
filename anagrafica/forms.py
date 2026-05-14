@@ -1,5 +1,6 @@
 from django import forms
 
+from . import choices_labels as _choices_labels
 from .models import Anagrafica
 
 
@@ -12,13 +13,21 @@ _SELECT = _INPUT
 _TEXTAREA = _INPUT + " min-h-[80px]"
 
 
+# Campi data-driven gestiti via TextChoiceLabel. I select del form sono
+# popolati a `__init__` con le scelte attive correnti + l'eventuale valore
+# corrente dell'istanza anche se disattivato (per non perderlo).
+_DATA_DRIVEN_FIELDS = (
+    "tipo_soggetto", "stato", "regime_contabile", "periodicita_iva", "contabilita",
+)
+
+
 class AnagraficaForm(forms.ModelForm):
     """Form di modifica completa di un'anagrafica.
 
-    I campi a choices (`tipo_soggetto`, `stato`, `regime_contabile`,
-    `periodicita_iva`, `contabilita`) usano `<select>` con i valori ammessi:
-    si previene cosi' la persistenza di stringhe non valide come "trasp" o
-    "cassa_reg" che possono finire in tabella tramite import legacy.
+    I 5 campi data-driven (`tipo_soggetto`, `stato`, `regime_contabile`,
+    `periodicita_iva`, `contabilita`) usano `<select>` con i valori
+    correnti da TextChoiceLabel. Modificabili da admin Django: vedi
+    `anagrafica.choices_labels`.
     """
 
     class Meta:
@@ -102,6 +111,27 @@ class AnagraficaForm(forms.ModelForm):
                 attrs={"class": _INPUT, "placeholder": "MM-DD", "maxlength": 5}
             ),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Popola dinamicamente i select dei 5 campi data-driven coi valori
+        # attivi di TextChoiceLabel. Se l'istanza esistente ha un codice
+        # disattivato lo includiamo comunque (per non perdere il valore
+        # corrente al primo salvataggio).
+        for f in _DATA_DRIVEN_FIELDS:
+            choices = list(_choices_labels.get_choices(f))
+            valid = {c for c, _ in choices}
+            current = getattr(self.instance, f, "") if self.instance else ""
+            if current and current not in valid:
+                choices.append(
+                    (current, _choices_labels.get_label(f, current) + " (disattivato)")
+                )
+            self.fields[f] = forms.ChoiceField(
+                choices=[("", "—")] + choices,
+                required=False,
+                widget=forms.Select(attrs={"class": _SELECT}),
+                label=self.fields[f].label if f in self.fields else f,
+            )
 
     def clean_codice_fiscale(self):
         return (self.cleaned_data.get("codice_fiscale") or "").strip().upper()

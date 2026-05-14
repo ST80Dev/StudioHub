@@ -91,9 +91,11 @@ class Anagrafica(models.Model):
     """
 
     codice_interno = models.CharField(max_length=16, unique=True)
-    tipo_soggetto = models.CharField(
-        max_length=8, choices=TipoSoggetto.choices, db_index=True, blank=True
-    )
+    # Codice del tipo (es. 'PF', 'ASS'). Valori ammessi gestiti da
+    # `TextChoiceLabel` (admin -> Etichette valori): l'utente puo' aggiungere
+    # nuovi tipi senza migrare il modello. Nessun `choices=` qui: la
+    # validazione e' applicativa (form/validators) basata sui codici attivi.
+    tipo_soggetto = models.CharField(max_length=30, blank=True, db_index=True)
     denominazione = models.CharField(max_length=255, db_index=True)
 
     codice_fiscale = models.CharField(max_length=16, blank=True, db_index=True)
@@ -122,10 +124,7 @@ class Anagrafica(models.Model):
     )
 
     stato = models.CharField(
-        max_length=10,
-        choices=StatoAnagrafica.choices,
-        default=StatoAnagrafica.ATTIVO,
-        db_index=True,
+        max_length=30, blank=True, default="attivo", db_index=True,
     )
     data_inizio_mandato = models.DateField(null=True, blank=True)
     data_fine_mandato = models.DateField(null=True, blank=True)
@@ -142,20 +141,15 @@ class Anagrafica(models.Model):
     indirizzo_provincia = models.CharField(max_length=2, blank=True)
     indirizzo_nazione = models.CharField(max_length=50, blank=True, default="Italia")
 
-    # Fiscale operativo (pilota gli adempimenti)
-    regime_contabile = models.CharField(
-        max_length=20, choices=RegimeContabile.choices, blank=True
-    )
-    periodicita_iva = models.CharField(
-        max_length=20, choices=PeriodicitaIVA.choices, blank=True
-    )
+    # Fiscale operativo (pilota gli adempimenti). Valori ammessi gestiti
+    # via TextChoiceLabel (vedi nota sopra su `tipo_soggetto`).
+    regime_contabile = models.CharField(max_length=30, blank=True)
+    periodicita_iva = models.CharField(max_length=30, blank=True)
 
     # Profilo fiscale arricchito (usato dal motore regole per derivare
     # quali adempimenti competono al cliente)
     contabilita = models.CharField(
-        max_length=10,
-        choices=GestioneContabilita.choices,
-        default=GestioneContabilita.ESTERNA,
+        max_length=30, blank=True, default="esterna",
         help_text="Interna = tenuta dallo studio. Esterna = tenuta dal cliente o da terzi.",
     )
     peso_contabilita = models.PositiveSmallIntegerField(
@@ -481,6 +475,14 @@ class TextChoiceLabel(models.Model):
     ordine = models.PositiveSmallIntegerField(
         default=0,
         help_text="Ordine di visualizzazione nei dropdown (asc).",
+    )
+    attivo = models.BooleanField(
+        default=True, db_index=True,
+        help_text=(
+            "Se False, il codice non compare nei dropdown e non e' selezionabile "
+            "per nuove anagrafiche, ma quelle esistenti che lo usano restano "
+            "valide e mostrano comunque la label."
+        ),
     )
     updated_at = models.DateTimeField(auto_now=True)
 

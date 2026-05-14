@@ -39,9 +39,11 @@ def _get_textchoices(field: str):
     }.get(field)
 
 
-# Entry della cache: una tripla (codice, label, label_micro). Il micro
-# puo' essere "" — in quel caso `get_micro_label` calcola il fallback.
-_cache: dict[str, list[tuple[str, str, str]]] = {}
+# Entry della cache: quadrupla (codice, label, label_micro, attivo).
+# Il micro puo' essere "" — in quel caso `get_micro_label` calcola il fallback.
+# `attivo=False` esclude il codice dai dropdown (get_choices/values) ma la
+# label resta risolvibile via get_label per le anagrafiche storicizzate.
+_cache: dict[str, list[tuple[str, str, str, bool]]] = {}
 _cache_lock = Lock()
 
 
@@ -53,11 +55,12 @@ def _micro_fallback(label: str) -> str:
     return pulito[:3].upper()
 
 
-def _build_cache(field: str) -> list[tuple[str, str, str]]:
-    """Costruisce la lista [(codice, label, label_micro), ...] per il campo.
+def _build_cache(field: str) -> list[tuple[str, str, str, bool]]:
+    """Costruisce la lista [(codice, label, label_micro, attivo), ...] per il campo.
 
-    1. Parte dai valori canonici delle TextChoices del modello (fallback).
-    2. Sovrascrive label/micro con quelle di TextChoiceLabel se presenti.
+    1. Parte dai valori canonici delle TextChoices del modello (fallback,
+       considerati attivi).
+    2. Sovrascrive label/micro/attivo con quelli di TextChoiceLabel se presenti.
     3. Aggiunge eventuali valori "extra" di TextChoiceLabel non presenti
        nelle TextChoices canoniche.
     Risultato ordinato per `ordine` di TextChoiceLabel (default 0), poi
@@ -71,25 +74,25 @@ def _build_cache(field: str) -> list[tuple[str, str, str]]:
     overrides = (
         TextChoiceLabel.objects.filter(field=field)
         .order_by("ordine", "label")
-        .values_list("codice", "label", "label_micro", "ordine")
+        .values_list("codice", "label", "label_micro", "ordine", "attivo")
     )
-    ordered: list[tuple[str, str, str, int]] = []
+    ordered: list[tuple[str, str, str, int, bool]] = []
     seen: set[str] = set()
-    for codice, label, label_micro, ordine in overrides:
-        ordered.append((codice, label, label_micro, ordine))
+    for codice, label, label_micro, ordine, attivo in overrides:
+        ordered.append((codice, label, label_micro, ordine, attivo))
         seen.add(codice)
 
     # Codici canonici non ancora visti (nessun override): in coda con ordine 999
     for codice, default_label in base:
         if codice in seen:
             continue
-        ordered.append((codice, default_label, "", 999))
+        ordered.append((codice, default_label, "", 999, True))
 
     ordered.sort(key=lambda r: (r[3], r[1]))
-    return [(c, l, m) for c, l, m, _ in ordered]
+    return [(c, l, m, a) for c, l, m, _, a in ordered]
 
 
-def _cached(field: str) -> list[tuple[str, str, str]]:
+def _cached(field: str) -> list[tuple[str, str, str, bool]]:
     with _cache_lock:
         if field not in _cache:
             _cache[field] = _build_cache(field)
@@ -97,9 +100,11 @@ def _cached(field: str) -> list[tuple[str, str, str]]:
 
 
 def get_label(field: str, codice: str | None) -> str:
+    """Label estesa del codice. Funziona anche per codici disattivati
+    (le anagrafiche storicizzate continuano a mostrare la label corretta)."""
     if not codice:
         return ""
-    for c, lbl, _ in _cached(field):
+    for c, lbl, _, _ in _cached(field):
         if c == codice:
             return lbl
     return codice  # fallback: codice raw se non riconosciuto
@@ -109,23 +114,36 @@ def get_micro_label(field: str, codice: str | None) -> str:
     """Sigla 3 char per `codice`. Fallback su prime 3 lettere di `label`."""
     if not codice:
         return ""
-    for c, lbl, micro in _cached(field):
+    for c, lbl, micro, _ in _cached(field):
         if c == codice:
             return micro or _micro_fallback(lbl)
     return codice[:3].upper()
 
 
-def get_choices(field: str) -> list[tuple[str, str]]:
-    return [(c, l) for c, l, _ in _cached(field)]
+def get_choices(field: str, include_inactive: bool = False) -> list[tuple[str, str]]:
+    """Lista [(codice, label), ...] per dropdown/select. Solo `attivo=True`
+    di default. `include_inactive=True` per UI di filtro che vogliono
+    mostrare anche i valori storici (es. lista clienti che ne ha)."""
+    rows = _cached(field)
+    if not include_inactive:
+        rows = [r for r in rows if r[3]]
+    return [(c, l) for c, l, _, _ in rows]
 
 
-def get_choices_micro(field: str) -> list[tuple[str, str]]:
+def get_choices_micro(field: str, include_inactive: bool = False) -> list[tuple[str, str]]:
     """Come `get_choices` ma con la sigla micro al posto della label estesa."""
-    return [(c, m or _micro_fallback(l)) for c, l, m in _cached(field)]
+    rows = _cached(field)
+    if not include_inactive:
+        rows = [r for r in rows if r[3]]
+    return [(c, m or _micro_fallback(l)) for c, l, m, _ in rows]
 
 
-def get_values(field: str) -> list[str]:
-    return [c for c, _, _ in _cached(field)]
+def get_values(field: str, include_inactive: bool = False) -> list[str]:
+    """Codici ammessi (solo attivi di default). Usato dai validatori."""
+    rows = _cached(field)
+    if not include_inactive:
+        rows = [r for r in rows if r[3]]
+    return [c for c, _, _, _ in rows]
 
 
 def invalidate_cache(field: str | None = None) -> None:
