@@ -170,8 +170,12 @@ LIPE_INLINE_FIELDS = {
     "protocollo_invio": ("text",   None),
     "note":             ("text",   None),
 }
+# Per la bulk update: oltre allo stato (TextChoices), si accetta
+# `protocollo_invio` con valore intero. Si usa un sentinel `int` come
+# "tipo" del campo perche' non e' un TextChoices.
 LIPE_BULK_FIELDS = {
     "stato": StatoAdempimento,
+    "protocollo_invio": int,
 }
 
 
@@ -286,6 +290,12 @@ def lista_lipe(request):
     # Stato della lista per il bottone "Crea elenco" / "Aggiorna elenco".
     lista_vuota = not base_qs.exists()
 
+    # Scadenza unica del periodo (mostrata nel banner in testa alla pagina:
+    # tutte le righe dello stesso (tipo, anno, periodo) hanno la stessa data
+    # di scadenza, quindi non serve ripeterla in colonna).
+    scad = tipo.scadenze.filter(periodo=periodo).first()
+    scadenza_periodo = scad.calcola_data_scadenza(anno) if scad else None
+
     # Righe oggi obsolete (cliente non piu' applicabile alle regole) — solo
     # in stati lavorabili. Lista breve, niente paginazione: se cresce molto
     # significa che il profilo fiscale dei clienti cambia spesso e va gestito.
@@ -325,6 +335,8 @@ def lista_lipe(request):
         # azioni "Crea/Aggiorna elenco" + segnalazione obsoleti
         "lista_vuota": lista_vuota,
         "obsoleti": obsoleti,
+        # scadenza unica del periodo (banner in testa)
+        "scadenza_periodo": scadenza_periodo,
     }
     template = (
         "adempimenti/_lipe_rows.html"
@@ -492,25 +504,42 @@ def lipe_inline_save(request, pk: int, field: str):
 @require_POST
 def lipe_bulk_update(request):
     field = request.POST.get("field", "")
-    value = request.POST.get("value", "")
+    value = (request.POST.get("value") or "").strip()
     ids = request.POST.getlist("ids")
 
     if field not in LIPE_BULK_FIELDS:
         return HttpResponseBadRequest("Campo non ammesso per la modifica bulk.")
-    choices_cls = LIPE_BULK_FIELDS[field]
-    if value not in choices_cls.values:
-        return HttpResponseBadRequest("Valore non ammesso per il campo.")
+
+    spec = LIPE_BULK_FIELDS[field]
+    # `protocollo_invio`: numero intero non negativo, salvato come stringa
+    # nel CharField del modello. Le TextChoices (es. stato) sono validate
+    # contro i loro `values`.
+    if spec is int:
+        try:
+            n = int(value)
+        except ValueError:
+            return HttpResponseBadRequest("Numero non valido.")
+        if n < 0:
+            return HttpResponseBadRequest("Il numero deve essere ≥ 0.")
+        db_value = str(n)
+        human_value = db_value
+    else:
+        if value not in spec.values:
+            return HttpResponseBadRequest("Valore non ammesso per il campo.")
+        db_value = value
+        human_value = spec(value).label
+
     if not ids:
         messages.warning(request, "Nessuna riga selezionata.")
         return redirect(reverse("adempimenti:lipe") + "?" + (request.POST.get("qs") or ""))
 
     updated = (
         Adempimento.objects.filter(pk__in=ids, is_deleted=False)
-        .update(**{field: value})
+        .update(**{field: db_value})
     )
     messages.success(
         request,
-        f"{updated} righe aggiornate: {field} → {choices_cls(value).label}.",
+        f"{updated} righe aggiornate: {field} → {human_value}.",
     )
     qs = request.POST.get("qs", "")
     return redirect(reverse("adempimenti:lipe") + ("?" + qs if qs else ""))

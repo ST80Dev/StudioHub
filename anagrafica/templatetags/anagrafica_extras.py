@@ -1,6 +1,39 @@
 from django import template
 
+from anagrafica import choices_labels
+
 register = template.Library()
+
+
+@register.filter
+def micro_label(codice, field):
+    """Sigla 3 char per un codice (es. 'INT' per 'interna').
+
+    Uso nei template: `{{ c.contabilita|micro_label:'contabilita' }}`.
+    Legge `TextChoiceLabel.label_micro` (configurabile da admin) con
+    fallback automatico dalle prime 3 lettere della label estesa. Vedi
+    `anagrafica.choices_labels.get_micro_label`.
+
+    Convenzione "3 livelli di etichetta": codice DB (`interna`) → micro
+    (`INT`, celle dense) → label estesa (`Interna (tenuta dallo studio)`,
+    form e dropdown). Vedi CLAUDE.md.
+    """
+    if codice is None or codice == "":
+        return "—"
+    return choices_labels.get_micro_label(field, codice) or "—"
+
+
+@register.filter
+def label_for(codice, field):
+    """Label estesa override-aware per un codice.
+
+    Uso: `{{ c.stato|label_for:'stato' }}`. Equivalente a
+    `c.get_stato_display()` ma usabile da template generici che ricevono
+    il field name come parametro.
+    """
+    if codice is None or codice == "":
+        return ""
+    return choices_labels.get_label(field, codice)
 
 
 @register.filter

@@ -143,10 +143,13 @@ class TextChoiceLabelAdmin(admin.ModelAdmin):
     rinominarlo se non sai cosa stai facendo.
     """
 
-    list_display = ("field", "codice", "label", "ordine", "updated_at")
+    list_display = ("field", "codice", "label_micro", "label", "ordine", "updated_at")
     list_filter = ("field",)
-    search_fields = ("codice", "label", "descrizione")
-    list_editable = ("label", "ordine")
+    search_fields = ("codice", "label", "label_micro", "descrizione")
+    list_editable = ("label_micro", "label", "ordine")
     ordering = ("field", "ordine", "label")
-    fields = ("field", "codice", "label", "ordine", "descrizione", "updated_at")
+    fields = (
+        "field", "codice", "label_micro", "label",
+        "ordine", "descrizione", "updated_at",
+    )
     readonly_fields = ("updated_at",)

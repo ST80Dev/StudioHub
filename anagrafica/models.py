@@ -5,15 +5,15 @@ from django.urls import reverse
 
 
 class TipoSoggetto(models.TextChoices):
-    PF = "PF", "Persona fisica"
-    PROFEX = "PROFEX", "Professionista"
-    DI = "DI", "Ditta individuale"
-    SNC = "SNC", "SNC"
-    SAS = "SAS", "SAS"
-    SRL = "SRL", "SRL"
-    SPA = "SPA", "SPA"
-    ASS = "ASS", "Associazione"
-    FALL = "FALL", "Fallimento"
+    PF = "pf", "Persona fisica"
+    PROFEX = "profex", "Professionista"
+    DI = "di", "Ditta individuale"
+    SNC = "snc", "SNC"
+    SAS = "sas", "SAS"
+    SRL = "srl", "SRL"
+    SPA = "spa", "SPA"
+    ASS = "ass", "Associazione"
+    FALL = "fall", "Fallimento"
 
 
 # Insiemi di tipo_soggetto (utili per logica applicativa)
@@ -467,7 +467,15 @@ class TextChoiceLabel(models.Model):
     )
     label = models.CharField(
         max_length=80,
-        help_text="Etichetta mostrata all'utente (modificabile liberamente).",
+        help_text="Etichetta estesa (form, dropdown filtri).",
+    )
+    label_micro = models.CharField(
+        max_length=3, blank=True,
+        help_text=(
+            "Sigla a 3 caratteri per badge e celle dense (es. 'INT', 'PF'). "
+            "Se vuota viene generato un fallback dalle prime 3 lettere di "
+            "`label`."
+        ),
     )
     descrizione = models.CharField(max_length=200, blank=True)
     ordine = models.PositiveSmallIntegerField(

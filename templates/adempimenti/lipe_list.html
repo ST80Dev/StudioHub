@@ -13,6 +13,11 @@
             {{ totale_complessivo }} righe · {{ totale_lavorabile }} ancora da lavorare ·
             <span class="opacity-70">clic su una cella per modificarla · clic su un'intestazione per ordinare</span>
         </p>
+        {% if scadenza_periodo %}
+        <p class="mt-1 inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-100 px-2 py-0.5 text-sm font-semibold text-amber-900 dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-100">
+            Scadenza Q{{ periodo }} {{ anno }}: <span class="tabular-nums">{{ scadenza_periodo|date:"d/m/Y" }}</span>
+        </p>
+        {% endif %}
     </div>
     <div class="flex items-center gap-3">
         {% include "partials/_paginator.html" with page_obj=page_obj %}
@@ -173,7 +178,7 @@ comunque).
 
 {# Form bulk wrappa la tabella per condividere i checkbox. #}
 <form method="post" action="{% url 'adempimenti:lipe_bulk_update' %}"
-      x-data="{ count: 0 }"
+      x-data="{ count: 0, field: 'stato' }"
       x-init="document.addEventListener('change', e => {
         if (e.target.matches('.bulk-check, #bulk-check-all')) {
           count = document.querySelectorAll('.bulk-check:checked').length;
@@ -183,11 +188,20 @@ comunque).
     <input type="hidden" name="qs" value="{{ request.GET.urlencode }}">
 
     <div class="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-sm dark:border-amber-800/40 dark:bg-amber-950/30">
-        <span class="text-xs text-amber-900 dark:text-amber-100">Modifica di massa stato:</span>
-        <input type="hidden" name="field" value="stato">
-        <select name="value" class="rounded-md border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-800">
+        <span class="text-xs text-amber-900 dark:text-amber-100">Modifica di massa:</span>
+        <select x-model="field" name="field" class="rounded-md border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-800">
+            <option value="stato">Stato</option>
+            <option value="protocollo_invio">N° Fornitura</option>
+        </select>
+        {# Input value: solo quello del campo selezionato viene inviato (l'altro è :disabled). #}
+        <select name="value"
+                x-show="field === 'stato'" :disabled="field !== 'stato'"
+                class="rounded-md border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-800">
             {% for val, lbl in stati %}<option value="{{ val }}">{{ lbl }}</option>{% endfor %}
         </select>
+        <input type="number" name="value" min="0" step="1" placeholder="N° Fornitura"
+               x-show="field === 'protocollo_invio'" :disabled="field !== 'protocollo_invio'"
+               class="w-32 rounded-md border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-800">
         <button type="submit"
                 :disabled="count === 0"
                 onclick="return confirm('Applicare la modifica a ' + document.querySelectorAll('.bulk-check:checked').length + ' righe selezionate?')"
@@ -207,21 +221,19 @@ comunque).
                         <input type="checkbox" id="bulk-check-all"
                                onclick="document.querySelectorAll('.bulk-check').forEach(c => c.checked = this.checked); document.dispatchEvent(new Event('change', {bubbles:true}));">
                     </th>
-                    {% include "anagrafica/_sort_header.html" with label="Codice" field="anagrafica__codice_interno" %}
                     {% include "anagrafica/_sort_header.html" with label="Cod Multi" field="anagrafica__codice_multi" %}
                     {% include "anagrafica/_sort_header.html" with label="Cliente" field="anagrafica__denominazione" %}
                     {% include "anagrafica/_sort_header.html" with label="Contab" field="anagrafica__contabilita" %}
                     {% include "anagrafica/_sort_header.html" with label="Regime" field="anagrafica__regime_contabile" %}
                     {% include "anagrafica/_sort_header.html" with label="IVA" field="anagrafica__periodicita_iva" %}
-                    {% include "anagrafica/_sort_header.html" with label="Scadenza" field="data_scadenza" %}
                     {% include "anagrafica/_sort_header.html" with label="Stato" field="stato" %}
-                    {% include "anagrafica/_sort_header.html" with label="Data invio" field="data_invio" %}
-                    {% include "anagrafica/_sort_header.html" with label="Protocollo" field="protocollo_invio" %}
+                    {# Data invio: header nascosto, sort/filtro disponibili via URL #}
+                    <th class="hidden"></th>
+                    {% include "anagrafica/_sort_header.html" with label="N° Fornitura" field="protocollo_invio" %}
                     <th class="px-3"></th>
                 </tr>
                 <tr class="bg-white dark:bg-slate-900 border-y border-slate-200 dark:border-slate-700">
                     <th class="px-2"></th>
-                    <th class="px-1 py-1"><input form="filters-form" type="text" name="f_codice" value="{{ f_codice }}" placeholder="filtra" class="w-20 rounded border-slate-300 px-1 py-0.5 text-xs dark:bg-slate-800 dark:border-slate-700"></th>
                     <th class="px-1 py-1"><input form="filters-form" type="text" name="f_multi" value="{{ f_multi }}" placeholder="filtra" class="w-20 rounded border-slate-300 px-1 py-0.5 text-xs dark:bg-slate-800 dark:border-slate-700"></th>
                     <th class="px-1 py-1"><input form="filters-form" type="text" name="f_denominazione" value="{{ f_denominazione }}" placeholder="filtra" class="w-full rounded border-slate-300 px-1 py-0.5 text-xs dark:bg-slate-800 dark:border-slate-700"></th>
                     <th class="px-1 py-1">
@@ -242,14 +254,13 @@ comunque).
                             {% for val, lbl in periodicita %}<option value="{{ val }}" {% if f_iva == val %}selected{% endif %}>{{ lbl }}</option>{% endfor %}
                         </select>
                     </th>
-                    <th class="px-1 py-1"></th>
                     <th class="px-1 py-1">
                         <select form="filters-form" name="f_stato" onchange="this.form.submit()" class="w-full rounded border-slate-300 px-1 py-0.5 text-xs dark:bg-slate-800 dark:border-slate-700">
                             <option value="">tutti</option>
                             {% for val, lbl in stati %}<option value="{{ val }}" {% if f_stato == val %}selected{% endif %}>{{ lbl }}</option>{% endfor %}
                         </select>
                     </th>
-                    <th class="px-1 py-1"></th>
+                    <th class="hidden"></th>
                     <th class="px-1 py-1"><input form="filters-form" type="text" name="f_protocollo" value="{{ f_protocollo }}" placeholder="filtra" class="w-full rounded border-slate-300 px-1 py-0.5 text-xs dark:bg-slate-800 dark:border-slate-700"></th>
                     <th class="px-1 py-1"></th>
                 </tr>
