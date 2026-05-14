@@ -45,31 +45,51 @@ class TipoAdempimentoCatalogoForm(forms.ModelForm):
         fields = [
             "codice",
             "denominazione",
+            "abbreviazione",
             "periodicita",
             "etichetta_data_evento",
             "giorni_offset_da_evento",
             "colore",
             "ordine",
             "attivo",
+            "ha_vista_dedicata",
             "note_regole",
         ]
         labels = {
             "codice": "Codice interno",
             "denominazione": "Denominazione",
+            "abbreviazione": "Abbreviazione (sigla)",
             "periodicita": "Periodicità",
             "etichetta_data_evento": "Nome evento di riferimento",
             "giorni_offset_da_evento": "Giorni dopo l'evento",
             "colore": "Colore UI",
             "ordine": "Ordine di visualizzazione",
             "attivo": "Attivo",
+            "ha_vista_dedicata": "Mostra in sidebar con vista dedicata",
             "note_regole": "Note interne",
         }
         help_texts = {
             "codice": (
                 "Identificativo tecnico univoco, senza spazi "
-                "(es. bilancio_ue, lipe, f24). Usato solo internamente."
+                "(es. bilancio-ue, liquidazione-iva-trimestrale, f24). "
+                "Usato dalle migration di seed e come opzione del comando "
+                "CLI `genera_adempimenti --tipo <codice>`. "
+                "NON è usato negli URL: rinominarlo non rompe le pagine, "
+                "ma se lo cambi aggiorna eventuali script che lo passano "
+                "come argomento."
             ),
             "denominazione": "Nome visualizzato agli utenti (es. 'Bilancio UE').",
+            "abbreviazione": (
+                "Sigla breve usata in sidebar, badge e UI compatta "
+                "(es. 'LIPE', 'BILUE', 'F24'). Liberamente modificabile. "
+                "Se vuota, la sidebar mostra la denominazione."
+            ),
+            "ha_vista_dedicata": (
+                "Se attivo, il tipo compare con un link diretto nella sidebar "
+                "e apre la pagina dedicata con layout per periodo. "
+                "Al momento la vista dedicata supporta solo periodicità "
+                "trimestrale."
+            ),
             "periodicita": (
                 "Annuale = 1 scadenza/anno · Trimestrale = 4 · "
                 "Mensile = 12 · Una tantum = senza ricorrenza."

@@ -1,11 +1,11 @@
 {% load anagrafica_extras %}
 {% comment %}
-Cella in modalità display (LIPE). Click → entra in modalità edit via HTMX.
+Cella in modalità display (vista tipo). Click → entra in modalità edit via HTMX.
 Parametri: `r` (Adempimento), `field` (uno fra: stato, data_invio, protocollo_invio, note),
-`extra_class` (opzionale, es. "hidden" per nascondere la colonna).
+`catalogo_id`, `extra_class` (opzionale, es. "hidden" per nascondere la colonna).
 {% endcomment %}
 <td class="px-3 group cursor-pointer hover:bg-amber-50 dark:hover:bg-amber-950/30 {{ extra_class }}"
-    hx-get="{% url 'adempimenti:lipe_inline_edit_form' r.pk field %}"
+    hx-get="{% url 'adempimenti:tipo_inline_edit_form' catalogo_id r.pk field %}"
     hx-trigger="click"
     hx-target="this"
     hx-swap="outerHTML"

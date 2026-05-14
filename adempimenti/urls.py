@@ -6,42 +6,59 @@ app_name = "adempimenti"
 
 urlpatterns = [
     path("", views.lista_adempimenti, name="list"),
-    # Vista dedicata Liquidazione IVA Trimestrale (LIPE)
-    path("liquidazione-iva-trimestrale/", views.lista_lipe, name="lipe"),
+
+    # Vista dedicata per un tipo di adempimento del catalogo.
+    # L'URL identifica il tipo per PK (non per codice) così il `codice` del
+    # catalogo resta liberamente modificabile dall'utente senza rompere
+    # URL, bookmark e reverse interne.
     path(
-        "liquidazione-iva-trimestrale/aggiungi-cliente/",
-        views.lipe_aggiungi_cliente,
-        name="lipe_aggiungi_cliente",
+        "tipo/<int:catalogo_id>/",
+        views.lista_tipo,
+        name="lista_tipo",
     ),
     path(
-        "liquidazione-iva-trimestrale/sincronizza/",
-        views.lipe_sincronizza,
-        name="lipe_sincronizza",
+        "tipo/<int:catalogo_id>/aggiungi-cliente/",
+        views.tipo_aggiungi_cliente,
+        name="tipo_aggiungi_cliente",
     ),
     path(
-        "liquidazione-iva-trimestrale/<int:pk>/rimuovi/",
-        views.lipe_rimuovi_riga,
-        name="lipe_rimuovi_riga",
+        "tipo/<int:catalogo_id>/sincronizza/",
+        views.tipo_sincronizza,
+        name="tipo_sincronizza",
     ),
     path(
-        "liquidazione-iva-trimestrale/cerca-clienti/",
-        views.lipe_search_clienti,
-        name="lipe_search_clienti",
+        "tipo/<int:catalogo_id>/cerca-clienti/",
+        views.tipo_search_clienti,
+        name="tipo_search_clienti",
     ),
     path(
-        "liquidazione-iva-trimestrale/bulk/",
-        views.lipe_bulk_update,
-        name="lipe_bulk_update",
+        "tipo/<int:catalogo_id>/bulk/",
+        views.tipo_bulk_update,
+        name="tipo_bulk_update",
     ),
     path(
-        "liquidazione-iva-trimestrale/<int:pk>/inline/<str:field>/edit/",
-        views.lipe_inline_edit_form,
-        name="lipe_inline_edit_form",
+        "tipo/<int:catalogo_id>/riga/<int:pk>/rimuovi/",
+        views.tipo_rimuovi_riga,
+        name="tipo_rimuovi_riga",
     ),
     path(
-        "liquidazione-iva-trimestrale/<int:pk>/inline/<str:field>/",
-        views.lipe_inline_save,
-        name="lipe_inline_save",
+        "tipo/<int:catalogo_id>/riga/<int:pk>/inline/<str:field>/edit/",
+        views.tipo_inline_edit_form,
+        name="tipo_inline_edit_form",
     ),
+    path(
+        "tipo/<int:catalogo_id>/riga/<int:pk>/inline/<str:field>/",
+        views.tipo_inline_save,
+        name="tipo_inline_save",
+    ),
+
+    # Redirect legacy: i vecchi URL `/adempimenti/liquidazione-iva-trimestrale/`
+    # restano funzionanti per bookmark e link salvati; rispondono 301 al nuovo
+    # URL basato su PK.
+    path(
+        "liquidazione-iva-trimestrale/",
+        views.legacy_lipe_redirect,
+    ),
+
     path("<int:pk>/", views.dettaglio_adempimento, name="detail"),
 ]

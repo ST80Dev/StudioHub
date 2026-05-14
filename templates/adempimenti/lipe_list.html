@@ -26,7 +26,7 @@
         Crea / Aggiorna elenco. Stesso endpoint, etichetta diversa in base
         al fatto che la lista per (anno, periodo) sia gia' popolata.
         {% endcomment %}
-        <form method="post" action="{% url 'adempimenti:lipe_sincronizza' %}" class="inline-flex">
+        <form method="post" action="{% url 'adempimenti:tipo_sincronizza' tipo.pk %}" class="inline-flex">
             {% csrf_token %}
             <input type="hidden" name="anno" value="{{ anno }}">
             <input type="hidden" name="periodo" value="{{ periodo }}">
@@ -160,7 +160,7 @@ comunque).
                     <td class="px-3 py-1">{{ o.anagrafica.get_regime_contabile_display|default:"—" }}</td>
                     <td class="px-3 py-1">{{ o.anagrafica.get_periodicita_iva_display|default:"—" }}</td>
                     <td class="px-3 py-1 text-right">
-                        <form method="post" action="{% url 'adempimenti:lipe_rimuovi_riga' o.pk %}" class="inline">
+                        <form method="post" action="{% url 'adempimenti:tipo_rimuovi_riga' tipo.pk o.pk %}" class="inline">
                             {% csrf_token %}
                             <input type="hidden" name="qs" value="{{ request.GET.urlencode }}">
                             <button type="submit"
@@ -177,7 +177,7 @@ comunque).
 {% endif %}
 
 {# Form bulk wrappa la tabella per condividere i checkbox. #}
-<form method="post" action="{% url 'adempimenti:lipe_bulk_update' %}"
+<form method="post" action="{% url 'adempimenti:tipo_bulk_update' tipo.pk %}"
       x-data="{ count: 0, field: 'stato' }"
       x-init="document.addEventListener('change', e => {
         if (e.target.matches('.bulk-check, #bulk-check-all')) {
@@ -289,13 +289,13 @@ comunque).
             Cerca per denominazione, codice, CF o P.IVA. Aggiunge una riga
             per <strong>{{ anno }} Q{{ periodo }}</strong> con lo stato scelto.
         </p>
-        <form method="post" action="{% url 'adempimenti:lipe_aggiungi_cliente' %}">
+        <form method="post" action="{% url 'adempimenti:tipo_aggiungi_cliente' tipo.pk %}">
             {% csrf_token %}
             <input type="hidden" name="anno" value="{{ anno }}">
             <input type="hidden" name="periodo" value="{{ periodo }}">
 
             <input type="text" name="q" placeholder="Cerca cliente…"
-                   hx-get="{% url 'adempimenti:lipe_search_clienti' %}"
+                   hx-get="{% url 'adempimenti:tipo_search_clienti' tipo.pk %}"
                    hx-trigger="keyup changed delay:200ms"
                    hx-target="#lipe-search-results"
                    class="w-full rounded border-slate-300 px-2 py-1 text-sm dark:bg-slate-800 dark:border-slate-700">

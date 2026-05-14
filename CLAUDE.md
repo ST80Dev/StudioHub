@@ -33,6 +33,13 @@
 
 ## Convenzione codici TextChoices
 
+> **Ambito**: questa sezione si applica ai codici dei campi a scelta gestiti
+> da `TextChoiceLabel` (es. `regime_contabile`, `periodicita_iva`,
+> `tipo_soggetto`). Per i codici del catalogo adempimenti
+> (`TipoAdempimentoCatalogo.codice`) vale la sezione "Tipi adempimento e
+> routing" qui sotto: lì il codice NON è usato negli URL e l'etichetta breve
+> ha un campo dedicato (`abbreviazione`).
+
 Regola: **i codici nel DB sono sempre in minuscolo, senza spazi**
 (es. `interna`, `ordinario`, `srl`, `profex`). Sono identificatori
 semantici stabili, *non* etichette: l'aspetto visivo si gestisce
@@ -105,6 +112,51 @@ Editabile da:
 NB: modificare lo Standard **non** propaga retroattivamente sugli stati
 gia' copiati nei tipi (per non sovrascrivere personalizzazioni). Impatta
 solo le copie alla creazione di un nuovo tipo.
+
+## Tipi adempimento e routing
+
+I tipi del catalogo adempimenti (`TipoAdempimentoCatalogo`) seguono regole
+diverse dai codici TextChoices: il `codice` NON è un contratto con gli URL
+né con la sidebar. Le pagine dedicate identificano il tipo per **PK**, non
+per codice, così l'utente può rinominare liberamente codice e denominazione
+da admin/UI senza rompere niente di runtime.
+
+3 campi che servono per cose diverse — non confonderli:
+
+1. **`codice`** (`SlugField`) — identificativo tecnico stabile. Usato:
+   - dalle migration di seed (`get_or_create(codice=...)`);
+   - dal comando CLI `python manage.py genera_adempimenti --tipo <codice>`.
+   Rinominabile, ma se cambia il codice gli script che lo passano come
+   argomento vanno aggiornati.
+2. **`abbreviazione`** (`CharField`, max 8, libera) — sigla mostrata in
+   sidebar, badge e UI compatta (es. "LIPE", "BILUE", "F24"). Liberamente
+   modificabile, nessun impatto di runtime. Fallback nei template tramite
+   `{{ tipo.etichetta_breve }}` (usa `abbreviazione`, altrimenti taglia
+   `denominazione`).
+3. **`denominazione`** — nome esteso visualizzato all'utente (es.
+   "Liquidazione IVA Trimestrale").
+
+**Vista dedicata**: il flag `ha_vista_dedicata=True` marca i tipi che
+devono comparire come link diretto nella sidebar e che usano la pagina
+`/adempimenti/tipo/<int:catalogo_id>/` con layout per periodo. I link
+della sidebar sono popolati dal context processor
+`adempimenti.context_processors.tipi_dedicati`. Oggi la vista dedicata
+supporta solo periodicità trimestrale (layout Q1..Q4); quando verrà
+generalizzata, ampliare la guardia in `_get_tipo_con_vista()` in
+`adempimenti/views.py`.
+
+**Compatibilità URL legacy**: la rotta storica
+`/adempimenti/liquidazione-iva-trimestrale/` fa 301 redirect al nuovo URL
+basato su PK (`views.legacy_lipe_redirect`). Mantenerla finché ci sono
+bookmark salvati; rimuovibile dopo qualche release.
+
+Quando si aggiunge un nuovo tipo con vista dedicata:
+- crearlo via UI Configurazione adempimenti (`/configurazione/adempimenti/`)
+  o via migration di seed con `get_or_create(codice=...)`;
+- spuntare `ha_vista_dedicata=True` e impostare un'`abbreviazione`;
+- la sidebar si aggiorna automaticamente (è dinamica).
+- se la periodicità non è trimestrale, prima generalizzare la view
+  `lista_tipo` (oggi è ancora cucita addosso al layout Q1..Q4).
 
 ## Pattern UI per liste/tabelle
 
