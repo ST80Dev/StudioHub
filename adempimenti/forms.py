@@ -5,6 +5,8 @@ per utenti non tecnici. Derivano dai modelli ma nascondono o traducono
 alcuni dettagli (es. anno_offset → checkbox 'anno successivo').
 """
 from django import forms
+from django.utils.html import format_html
+from django.utils.safestring import mark_safe
 
 from .models import (
     ChecklistStep,
@@ -15,6 +17,56 @@ from .models import (
     TipoAdempimentoCatalogo,
 )
 from .regole_helpers import CAMPI_INFO, KIND_BOOL, KIND_ENUM, valori_validi
+
+
+# Etichetta-esempio mostrata nel preview di ciascun colore. Serve solo per
+# far vedere come appare un badge reale con quel colore (e' un esempio,
+# l'utente sceglie poi una propria denominazione per lo stato).
+COLORE_PREVIEW_LABEL = {
+    "todo":   "Da fare",
+    "wip":    "In corso",
+    "review": "In revisione",
+    "done":   "Completato",
+    "idle":   "Riposo",
+    "error":  "Errori",
+}
+
+
+class ColoreBadgeRadioSelect(forms.RadioSelect):
+    """Widget per il campo `colore`: lista di radio con preview reale.
+
+    Invece di un `<select>` con la sola label testuale, mostra una colonna
+    di opzioni dove ciascuna voce e' un badge `.sh-state-<value>` con un
+    testo-esempio (es. il rosso compare gia' colorato sotto la voce
+    'Errori'), cosi' l'utente sceglie a vista.
+    """
+
+    def render(self, name, value, attrs=None, renderer=None):
+        rows = []
+        selected = value or ""
+        for code, label in self.choices:
+            if code == "":
+                continue
+            checked = "checked" if str(code) == str(selected) else ""
+            preview = COLORE_PREVIEW_LABEL.get(code, label)
+            rows.append(format_html(
+                '<label class="flex cursor-pointer items-center gap-2 rounded-md '
+                'border border-slate-200 px-2 py-1.5 hover:bg-slate-50 '
+                'has-[:checked]:border-brand-500 has-[:checked]:ring-1 '
+                'has-[:checked]:ring-brand-500 dark:border-slate-700 '
+                'dark:hover:bg-slate-800">'
+                '<input type="radio" name="{name}" value="{value}" {checked} '
+                'class="h-4 w-4 text-brand-600 focus:ring-brand-500">'
+                '<span class="sh-state sh-state-{value}">{preview}</span>'
+                '<span class="text-[11px] text-slate-500">{label}</span>'
+                "</label>",
+                name=name, value=code, checked=mark_safe(checked),
+                preview=preview, label=label,
+            ))
+        return format_html(
+            '<div class="grid grid-cols-1 gap-1 sm:grid-cols-2">{}</div>',
+            mark_safe("".join(rows)),
+        )
 
 
 INPUT_CLASSES = (
@@ -244,11 +296,16 @@ class StatoAdempimentoTipoForm(forms.ModelForm):
         }
         widgets = {
             "livello": forms.NumberInput(attrs={"min": 0, "max": 100}),
+            "colore": ColoreBadgeRadioSelect,
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        for field in self.fields.values():
+        for name, field in self.fields.items():
+            if name == "colore":
+                # Il widget colore renderizza un proprio HTML (radio + badge
+                # preview): non gli serve la classe input testuale.
+                continue
             _style(field)
 
 

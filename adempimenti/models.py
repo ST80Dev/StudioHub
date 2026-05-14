@@ -151,6 +151,7 @@ class ColoreStato(models.TextChoices):
     REVIEW = "review", "In revisione (azzurro)"
     DONE = "done", "Completato (verde)"
     IDLE = "idle", "Riposo (slate)"
+    ERROR = "error", "Errori (rosso)"
 
 
 class StatoAdempimentoBase(models.Model):
