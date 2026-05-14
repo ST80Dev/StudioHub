@@ -49,9 +49,13 @@ table.sh-table-sticky-first thead th:first-child {
 }
 .sh-state.sh-state-done   { background: rgb(220 252 231); color: rgb(21 128 61); }
 .sh-state.sh-state-wip    { background: rgb(254 243 199); color: rgb(146 64 14); }
-.sh-state.sh-state-todo   { background: rgb(254 226 226); color: rgb(153 27 27); }
-.sh-state.sh-state-idle   { background: rgb(226 232 240); color: rgb(51 65 85); }
-html.dark .sh-state.sh-state-done { background: rgba(22,101,52,.25); color: rgb(134 239 172); }
-html.dark .sh-state.sh-state-wip  { background: rgba(146,64,14,.25);  color: rgb(253 224 71); }
-html.dark .sh-state.sh-state-todo { background: rgba(153,27,27,.25);  color: rgb(252 165 165); }
-html.dark .sh-state.sh-state-idle { background: rgba(51,65,85,.4);    color: rgb(203 213 225); }
+.sh-state.sh-state-todo   { background: rgb(241 245 249); color: rgb(51 65 85); }
+.sh-state.sh-state-review { background: rgb(224 242 254); color: rgb(3 105 161); }
+.sh-state.sh-state-idle   { background: rgb(226 232 240); color: rgb(71 85 105); }
+.sh-state.sh-state-error  { background: rgb(254 226 226); color: rgb(153 27 27); }
+html.dark .sh-state.sh-state-done   { background: rgba(22,101,52,.25); color: rgb(134 239 172); }
+html.dark .sh-state.sh-state-wip    { background: rgba(146,64,14,.25);  color: rgb(253 224 71); }
+html.dark .sh-state.sh-state-todo   { background: rgba(51,65,85,.4);    color: rgb(203 213 225); }
+html.dark .sh-state.sh-state-review { background: rgba(3,105,161,.25);  color: rgb(125 211 252); }
+html.dark .sh-state.sh-state-idle   { background: rgba(71,85,105,.4);   color: rgb(203 213 225); }
+html.dark .sh-state.sh-state-error  { background: rgba(153,27,27,.25);  color: rgb(252 165 165); }
