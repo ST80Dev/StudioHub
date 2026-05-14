@@ -8,7 +8,8 @@ import json
 
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
+from django.db.models import Count
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
@@ -102,12 +103,21 @@ def tipo_detail(request, pk: int):
         context["scadenze"] = tipo.scadenze.all().order_by("periodo")
         context["nuova_scadenza_form"] = ScadenzaPeriodoForm()
     elif tab == TAB_STATI:
-        context["stati_tipo"] = tipo.stati.all().order_by("livello", "denominazione")
+        stati_qs = list(tipo.stati.all().order_by("livello", "denominazione"))
+        # Annoto ogni stato col numero di adempimenti che lo usano: serve
+        # al template per mostrare il picker di rimpiazzo all'eliminazione.
+        usi = dict(
+            tipo.adempimenti.values_list("stato")
+            .annotate(n=Count("id"))
+            .values_list("stato", "n")
+        )
+        for s in stati_qs:
+            s.in_uso_count = usi.get(s.codice, 0)
+        context["stati_tipo"] = stati_qs
+        context["stati_attivi"] = [s for s in stati_qs if s.attivo]
         # Default sensato per il prossimo stato custom: livello superiore
         # all'attuale massimo (cosi' compare in fondo nella sort).
-        max_livello = max(
-            (s.livello for s in context["stati_tipo"]), default=0,
-        )
+        max_livello = max((s.livello for s in stati_qs), default=0)
         context["nuovo_stato_form"] = StatoAdempimentoTipoForm(
             initial={"livello": min(100, max_livello + 10), "lavorabile": True},
         )
@@ -257,26 +267,54 @@ def stato_create(request, pk: int):
 @staff_member_required
 @require_POST
 def stato_delete(request, pk: int, sid: int):
-    """Elimina uno stato custom. Gli stati `e_predefinito=True` sono protetti."""
+    """Elimina uno stato del tipo (predefinito o custom).
+
+    Se ci sono adempimenti che usano lo stato, richiede un
+    `nuovo_stato_codice` di rimpiazzo: deve essere uno stato attivo dello
+    stesso tipo, diverso da quello da eliminare. Riassegnazione e delete
+    avvengono in transazione.
+    """
     stato = get_object_or_404(
         StatoAdempimentoTipo, pk=sid, tipo_adempimento_id=pk,
     )
-    if stato.e_predefinito:
-        messages.error(
+    tipo = stato.tipo_adempimento
+    in_uso_qs = tipo.adempimenti.filter(stato=stato.codice)
+    n_in_uso = in_uso_qs.count()
+
+    if n_in_uso > 0:
+        nuovo_codice = (request.POST.get("nuovo_stato_codice") or "").strip()
+        if not nuovo_codice:
+            messages.error(
+                request,
+                f"'{stato.denominazione}' è usato da {n_in_uso} adempimenti: "
+                "scegli uno stato di rimpiazzo prima di eliminarlo.",
+            )
+            return _redirect_tab(pk, TAB_STATI)
+        nuovo = (
+            StatoAdempimentoTipo.objects
+            .filter(tipo_adempimento=tipo, codice=nuovo_codice, attivo=True)
+            .exclude(pk=stato.pk)
+            .first()
+        )
+        if nuovo is None:
+            messages.error(
+                request,
+                "Stato di rimpiazzo non valido: dev'essere uno stato attivo "
+                "di questo tipo, diverso da quello da eliminare.",
+            )
+            return _redirect_tab(pk, TAB_STATI)
+        with transaction.atomic():
+            in_uso_qs.update(stato=nuovo.codice)
+            stato.delete()
+        messages.success(
             request,
-            "Non si possono eliminare gli stati predefiniti. "
-            "Per nasconderli, disattivali con il flag 'attivo'.",
+            f"Stato '{stato.denominazione}' eliminato; {n_in_uso} adempimenti "
+            f"riassegnati a '{nuovo.denominazione}'.",
         )
         return _redirect_tab(pk, TAB_STATI)
-    if stato.tipo_adempimento.adempimenti.filter(stato=stato.codice).exists():
-        messages.error(
-            request,
-            f"Non posso eliminare '{stato.denominazione}': ci sono adempimenti "
-            "che hanno ancora questo stato. Cambia il loro stato prima.",
-        )
-        return _redirect_tab(pk, TAB_STATI)
+
     stato.delete()
-    messages.success(request, "Stato rimosso.")
+    messages.success(request, f"Stato '{stato.denominazione}' rimosso.")
     return _redirect_tab(pk, TAB_STATI)
 
 
