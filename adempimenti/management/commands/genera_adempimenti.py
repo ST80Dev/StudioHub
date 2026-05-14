@@ -1,8 +1,8 @@
 """Genera in massa righe Adempimento per un tipo + anno fiscale.
 
-Itera su tutte le anagrafiche attive non cancellate, valuta le regole di
-applicabilità del tipo richiesto, e crea (idempotente, get_or_create per
-tupla unique) una riga per ogni periodo previsto dal tipo.
+Wrapper CLI sopra `adempimenti.services.sincronizza_adempimenti`. Stessa
+logica usata anche dal bottone "Crea elenco" / "Aggiorna elenco" nella
+vista LIPE, cosi' i due ingressi non possono divergere nel tempo.
 
 Esempi:
 
@@ -13,14 +13,9 @@ Esempi:
 from __future__ import annotations
 
 from django.core.management.base import BaseCommand, CommandError
-from django.db import transaction
 
-from adempimenti.models import (
-    Adempimento,
-    StatoAdempimento,
-    TipoAdempimentoCatalogo,
-)
-from anagrafica.models import Anagrafica
+from adempimenti.models import TipoAdempimentoCatalogo
+from adempimenti.services import sincronizza_adempimenti
 
 
 class Command(BaseCommand):
@@ -50,11 +45,6 @@ class Command(BaseCommand):
 
     def handle(self, *args, **opts):
         codice = opts["tipo"]
-        anno = opts["anno"]
-        solo_periodo = opts["solo_periodo"]
-        dry_run = opts["dry_run"]
-        includi_non_attivi = opts["includi_non_attivi"]
-
         try:
             tipo = TipoAdempimentoCatalogo.objects.prefetch_related(
                 "regole", "scadenze",
@@ -62,76 +52,28 @@ class Command(BaseCommand):
         except TipoAdempimentoCatalogo.DoesNotExist:
             raise CommandError(f"Tipo adempimento '{codice}' non trovato.")
 
-        regole = [r for r in tipo.regole.all() if r.attiva]
-        if not regole:
+        regole_attive = [r for r in tipo.regole.all() if r.attiva]
+        if not regole_attive:
             raise CommandError(
                 f"Tipo '{codice}' senza regole attive: nessun cliente verrebbe selezionato."
             )
 
-        scadenze = list(tipo.scadenze.all())
-        if solo_periodo is not None:
-            scadenze = [s for s in scadenze if s.periodo == solo_periodo]
-            if not scadenze:
-                raise CommandError(
-                    f"Nessuna scadenza definita per il periodo {solo_periodo} sul tipo '{codice}'."
-                )
-
-        anagrafiche = Anagrafica.objects.filter(is_deleted=False).prefetch_related(
-            "categorie"
-        )
-        if not includi_non_attivi:
-            anagrafiche = anagrafiche.filter(stato="attivo")
-
-        applicabili = []
-        for anag in anagrafiche:
-            if all(r.valuta(anag) for r in regole):
-                applicabili.append(anag)
-
-        self.stdout.write(
-            self.style.NOTICE(
-                f"Tipo: {tipo.denominazione} · anno {anno} · "
-                f"{len(applicabili)} clienti applicabili · "
-                f"{len(scadenze)} periodo/i"
-            )
+        risultato = sincronizza_adempimenti(
+            tipo,
+            opts["anno"],
+            solo_periodo=opts["solo_periodo"],
+            dry_run=opts["dry_run"],
+            includi_non_attivi=opts["includi_non_attivi"],
         )
 
-        creati = 0
-        gia_esistenti = 0
-        with transaction.atomic():
-            for anag in applicabili:
-                for scad in scadenze:
-                    data_scadenza = scad.calcola_data_scadenza(anno)
-                    if dry_run:
-                        if Adempimento.objects.filter(
-                            anagrafica=anag, tipo=tipo,
-                            anno_fiscale=anno, periodo=scad.periodo,
-                        ).exists():
-                            gia_esistenti += 1
-                        else:
-                            creati += 1
-                        continue
-
-                    _obj, created = Adempimento.objects.get_or_create(
-                        anagrafica=anag,
-                        tipo=tipo,
-                        anno_fiscale=anno,
-                        periodo=scad.periodo,
-                        defaults={
-                            "data_scadenza": data_scadenza,
-                            "stato": StatoAdempimento.DA_FARE,
-                        },
-                    )
-                    if created:
-                        creati += 1
-                    else:
-                        gia_esistenti += 1
-
-            if dry_run:
-                # Annulla qualunque effetto collaterale (per sicurezza, anche
-                # se qui non scriviamo).
-                transaction.set_rollback(True)
-
-        prefix = "[DRY-RUN] " if dry_run else ""
+        prefix = "[DRY-RUN] " if opts["dry_run"] else ""
+        self.stdout.write(self.style.NOTICE(
+            f"Tipo: {tipo.denominazione} · anno {risultato.anno} · "
+            f"{risultato.clienti_applicabili} clienti applicabili · "
+            f"{len(risultato.periodi)} periodo/i"
+        ))
         self.stdout.write(self.style.SUCCESS(
-            f"{prefix}Creati: {creati} · Già esistenti: {gia_esistenti}"
+            f"{prefix}Creati: {risultato.creati} · "
+            f"Già esistenti: {risultato.gia_esistenti} · "
+            f"Obsoleti: {len(risultato.obsoleti_pks)}"
         ))
