@@ -50,6 +50,23 @@ from .models import (
 # Helpers di parsing valori
 # ---------------------------------------------------------------------------
 
+# Valori "spazzatura" prodotti tipicamente da Excel quando una formula non
+# si risolve, o quando il foglio originale ha celle vuote codificate con
+# placeholder testuali. Vengono trattati come stringhe vuote prima di
+# qualsiasi normalizzazione/persistenza.
+_GARBAGE_VALUES = frozenset({
+    "#N/A", "#NA", "#NUM!", "#NULL!", "#REF!", "#VALUE!", "#DIV/0!", "#NAME?",
+    "N/A", "NA", "NULL", "null", "None", "-", "—", "–", "n.d.", "N.D.", "nd",
+})
+
+
+def _is_garbage(value) -> bool:
+    if value is None:
+        return True
+    s = str(value).strip()
+    return s == "" or s in _GARBAGE_VALUES
+
+
 _DATE_FORMATS = (
     "%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y",
     "%Y-%m-%d", "%Y/%m/%d",
@@ -199,7 +216,13 @@ class ApplyStats:
 
 
 # Campi obbligatori per la creazione di una nuova Anagrafica.
-_REQUIRED_FOR_CREATE = ("denominazione", "tipo_soggetto", "codice_interno")
+# tipo_soggetto NON e' obbligatorio: l'utente puo' creare anagrafiche
+# senza tipo e completarlo dopo manualmente dalla lista.
+_REQUIRED_FOR_CREATE = ("denominazione", "codice_interno")
+
+# Codici univoci o quasi-univoci su cui fare pre-check prima di create per
+# fornire un messaggio user-friendly invece di un IntegrityError grezzo.
+_UNIQUE_CODE_FIELDS = ("codice_cli", "codice_fiscale", "partita_iva")
 
 
 def _build_anagrafica_payload(
@@ -210,7 +233,8 @@ def _build_anagrafica_payload(
     """Restituisce (campi_anagrafica, extra_kv, ces_acq_derivati).
 
     Applica anche i fallback dal contesto di sezione: tipo_soggetto,
-    regime_contabile, contabilita.
+    regime_contabile, contabilita. Filtra i valori "spazzatura" tipici di
+    Excel (#N/A, #NUM!, -, ecc.) trattandoli come stringhe vuote.
     """
     anagrafica_fields: dict = {}
     extra_kv: dict = {}
@@ -220,7 +244,7 @@ def _build_anagrafica_payload(
         if not target:
             continue
         raw = (riga.dati_grezzi or {}).get(col, "")
-        if raw in (None, ""):
+        if _is_garbage(raw):
             continue
         if target.startswith("extra:"):
             chiave = target[len("extra:"):]
@@ -291,6 +315,11 @@ def _apply_single_row(riga: ImportRow, sessione: ImportSession, stats: ApplyStat
 
     payload, extra_kv, _ = _build_anagrafica_payload(riga, mapping, is_new=is_new)
 
+    # `codice_cli` e' unique nullable: una stringa vuota o garbage va
+    # convertita in None per evitare il conflitto con altre righe "vuote".
+    if "codice_cli" in payload and not payload["codice_cli"]:
+        payload["codice_cli"] = None
+
     try:
         with transaction.atomic():
             if is_new:
@@ -300,6 +329,24 @@ def _apply_single_row(riga: ImportRow, sessione: ImportSession, stats: ApplyStat
                     raise ValueError(
                         f"Campi obbligatori mancanti: {', '.join(missing)}"
                     )
+                # Pre-check conflitti su codici univoci: messaggio user-friendly
+                # invece dell'IntegrityError grezzo di Postgres.
+                for code_field in _UNIQUE_CODE_FIELDS:
+                    code_value = payload.get(code_field)
+                    if not code_value:
+                        continue
+                    existing = (
+                        Anagrafica.objects.filter(**{code_field: code_value})
+                        .filter(is_deleted=False)
+                        .exclude(pk=getattr(riga.anagrafica_match, "pk", -1))
+                        .first()
+                    )
+                    if existing:
+                        raise ValueError(
+                            f"{code_field} {code_value!r} già usato da "
+                            f"'{existing.denominazione}' (id {existing.pk}). "
+                            f"Conferma il match invece di creare una nuova anagrafica."
+                        )
                 anagrafica = Anagrafica.objects.create(**payload)
                 stats.create += 1
             else:
