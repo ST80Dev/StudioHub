@@ -34,6 +34,22 @@ urlpatterns = [
         v.step_delete,
         name="step_delete",
     ),
+    # Stati (per-tipo)
+    path(
+        "tipi/<int:pk>/stati/nuovo/",
+        v.stato_create,
+        name="stato_create",
+    ),
+    path(
+        "tipi/<int:pk>/stati/<int:sid>/elimina/",
+        v.stato_delete,
+        name="stato_delete",
+    ),
+    path(
+        "tipi/<int:pk>/stati/<int:sid>/toggle/",
+        v.stato_toggle_attivo,
+        name="stato_toggle_attivo",
+    ),
     # Regole
     path(
         "tipi/<int:pk>/regole/nuova/",

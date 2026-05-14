@@ -1,0 +1,106 @@
+{% load adempimenti_extras %}
+<div class="grid grid-cols-1 gap-4 lg:grid-cols-5">
+    <div class="lg:col-span-3">
+        <p class="mb-2 text-[11px] text-slate-500">
+            Stati di avanzamento per gli adempimenti di questo tipo. Gli stati
+            marcati <strong>predef.</strong> arrivano dal set Standard e non sono
+            eliminabili (modificabili sì). Per nasconderli senza perdere lo
+            storico, disattivali col toggle. Per aggiungere stati custom usa il
+            modulo a destra. <em>Lavorabile</em> = lo stato conta nel
+            &quot;lavoro residuo&quot;. <em>Livello</em> = 0&hellip;100, progressione visiva
+            (anche sort).
+        </p>
+        <div class="overflow-auto rounded-md border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+            <table class="sh-table w-full">
+                <thead>
+                    <tr class="text-left text-[11px] uppercase tracking-wider text-slate-500">
+                        <th class="px-3 w-16">Liv.</th>
+                        <th class="px-3">Codice</th>
+                        <th class="px-3">Denominazione</th>
+                        <th class="px-3 w-16">Sigla</th>
+                        <th class="px-3 w-20">Badge</th>
+                        <th class="px-3 w-20 text-center">Lav.</th>
+                        <th class="px-3 w-20 text-center">Iniz.</th>
+                        <th class="px-3 w-20 text-center">Predef.</th>
+                        <th class="px-3 w-24 text-center">Attivo</th>
+                        <th class="px-3"></th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+                    {% for s in stati_tipo %}
+                    <tr {% if not s.attivo %}class="opacity-50"{% endif %}>
+                        <td class="px-3 py-2 tabular-nums text-sm text-slate-500">{{ s.livello }}</td>
+                        <td class="px-3 py-2 font-mono text-xs">{{ s.codice }}</td>
+                        <td class="px-3 py-2 text-sm">{{ s.denominazione }}</td>
+                        <td class="px-3 py-2 font-mono text-xs">{{ s.sigla|default:"—" }}</td>
+                        <td class="px-3 py-2">{% stato_badge_by_codice tipo.pk s.codice %}</td>
+                        <td class="px-3 py-2 text-center">
+                            {% if s.lavorabile %}<span class="text-emerald-600">✓</span>{% else %}<span class="text-slate-400">—</span>{% endif %}
+                        </td>
+                        <td class="px-3 py-2 text-center">
+                            {% if s.iniziale_default %}<span class="text-brand-600">★</span>{% else %}<span class="text-slate-300">—</span>{% endif %}
+                        </td>
+                        <td class="px-3 py-2 text-center">
+                            {% if s.e_predefinito %}<span class="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">predef.</span>{% else %}<span class="text-slate-300">—</span>{% endif %}
+                        </td>
+                        <td class="px-3 py-2 text-center">
+                            <form method="post" action="{% url 'configurazione:stato_toggle_attivo' tipo.pk s.pk %}" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="text-xs {% if s.attivo %}text-emerald-700 hover:text-emerald-900{% else %}text-slate-500 hover:text-slate-800{% endif %}">
+                                    {% if s.attivo %}attivo{% else %}disattivo{% endif %}
+                                </button>
+                            </form>
+                        </td>
+                        <td class="px-3 py-2 text-right">
+                            {% if not s.e_predefinito %}
+                            <form method="post" action="{% url 'configurazione:stato_delete' tipo.pk s.pk %}"
+                                  onsubmit="return confirm('Eliminare lo stato &quot;{{ s.denominazione|escapejs }}&quot;? L\'operazione fallisce se ci sono adempimenti che lo usano.');" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="text-xs text-red-600 hover:underline">Elimina</button>
+                            </form>
+                            {% else %}
+                            <span class="text-[11px] text-slate-400" title="Gli stati predefiniti non sono eliminabili. Usa il toggle 'attivo' per nasconderli dai dropdown.">—</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="10" class="px-3 py-6 text-center text-sm text-slate-500">
+                        Nessuno stato configurato. (Improbabile: i 6 stati Standard
+                        vengono copiati automaticamente alla creazione del tipo.)
+                    </td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="mt-2 text-[11px] text-slate-500">
+            Per modificare i campi dei singoli stati (denominazione, sigla,
+            colore, ecc.), usa l'admin Django:
+            <a href="/admin/adempimenti/tipoadempimentocatalogo/{{ tipo.pk }}/change/"
+               class="hover:underline text-brand-700">apri il tipo in admin</a>
+            (sezione "Stati (per tipo)").
+        </p>
+    </div>
+
+    <div class="lg:col-span-2">
+        <form method="post" action="{% url 'configurazione:stato_create' tipo.pk %}"
+              class="space-y-2 rounded-md border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+            {% csrf_token %}
+            <div class="mb-1 text-sm font-medium">Nuovo stato custom</div>
+            {% include "configurazione/_field.html" with field=nuovo_stato_form.codice compact=True %}
+            {% include "configurazione/_field.html" with field=nuovo_stato_form.denominazione compact=True %}
+            <div class="grid grid-cols-2 gap-2">
+                {% include "configurazione/_field.html" with field=nuovo_stato_form.sigla compact=True %}
+                {% include "configurazione/_field.html" with field=nuovo_stato_form.livello compact=True %}
+            </div>
+            {% include "configurazione/_field.html" with field=nuovo_stato_form.colore compact=True %}
+            <div class="grid grid-cols-2 gap-2">
+                {% include "configurazione/_field.html" with field=nuovo_stato_form.lavorabile compact=True %}
+                {% include "configurazione/_field.html" with field=nuovo_stato_form.iniziale_default compact=True %}
+            </div>
+            {% include "configurazione/_field.html" with field=nuovo_stato_form.attivo compact=True %}
+            <button type="submit" class="mt-2 rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
+                Aggiungi
+            </button>
+        </form>
+    </div>
+</div>

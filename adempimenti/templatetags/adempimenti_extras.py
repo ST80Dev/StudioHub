@@ -14,7 +14,60 @@ from django.utils.safestring import mark_safe
 
 from anagrafica import choices_labels as _choices_labels
 
+from .. import stati as _stati
+
 register = template.Library()
+
+
+@register.simple_tag
+def stato_badge(adempimento) -> str:
+    """Render del badge dello stato per un Adempimento.
+
+    Legge denominazione + colore dal catalogo `StatoAdempimentoTipo` del
+    tipo della riga (per-tipo). Niente piu' if/elif hardcoded per codice.
+    Fallback per codici non riconosciuti: badge grigio con il codice raw.
+    """
+    if adempimento is None:
+        return ""
+    s = _stati.stato_by_codice(adempimento.tipo_id, adempimento.stato)
+    if s is None:
+        return format_html(
+            '<span class="sh-state sh-state-idle">{}</span>',
+            adempimento.stato or "—",
+        )
+    return format_html(
+        '<span class="sh-state sh-state-{colore}">{label}</span>',
+        colore=s.colore,
+        label=s.denominazione,
+    )
+
+
+@register.simple_tag
+def stato_badge_by_codice(tipo_id, codice) -> str:
+    """Variante di `stato_badge` quando non hai l'oggetto Adempimento.
+
+    Se `tipo_id` non e' fornito (None / 0 / ''), cerca il primo match per
+    codice across-tipi (best-effort per template generici come la home).
+    """
+    if not codice:
+        return ""
+    s = _stati.stato_by_codice(tipo_id, codice) if tipo_id else None
+    if s is None:
+        # Fallback "any tipo": prendi la prima voce attiva con quel codice
+        # (le denominazioni copiate dallo Standard sono coerenti tra tipi).
+        from ..models import StatoAdempimentoTipo
+        s = (
+            StatoAdempimentoTipo.objects.filter(codice=codice, attivo=True)
+            .only("denominazione", "colore")
+            .first()
+        )
+    if s is None:
+        return format_html('<span class="sh-state sh-state-idle">{}</span>', codice)
+    return format_html(
+        '<span class="sh-state sh-state-{colore}">{label}</span>',
+        colore=s.colore,
+        label=s.denominazione,
+    )
 
 
 @register.filter(name="referenti_studio")
@@ -144,8 +197,17 @@ def column_filter(context, column):
 
     # select
     if column.filter_choices_key == "_stato_adempimento":
-        from ..models import StatoAdempimento
-        choices = list(StatoAdempimento.choices)
+        # Sistema colonne riusabile (non tipo-specifico): unione dei codici
+        # stato attivi da tutti i tipi, deduplicati.
+        from ..models import StatoAdempimentoTipo
+        seen: dict[str, str] = {}
+        for cod, den in (
+            StatoAdempimentoTipo.objects.filter(attivo=True)
+            .values_list("codice", "denominazione")
+            .order_by("livello", "denominazione")
+        ):
+            seen.setdefault(cod, den)
+        choices = list(seen.items())
     else:
         choices = _choices_labels.get_choices(column.filter_choices_key)
 

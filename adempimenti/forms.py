@@ -11,6 +11,7 @@ from .models import (
     OperatoreRegola,
     RegolaApplicabilita,
     ScadenzaPeriodo,
+    StatoAdempimentoTipo,
     TipoAdempimentoCatalogo,
 )
 from .regole_helpers import CAMPI_INFO, KIND_BOOL, KIND_ENUM, valori_validi
@@ -191,6 +192,58 @@ class ChecklistStepForm(forms.ModelForm):
                 "Numero per ordinare gli step. Consigliato a step di 10 "
                 "(10, 20, 30…) per lasciare spazio a inserimenti futuri."
             ),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            _style(field)
+
+
+# ---------------------------------------------------------------------------
+
+class StatoAdempimentoTipoForm(forms.ModelForm):
+    """Form per la creazione di uno stato custom per un TipoAdempimento.
+
+    NB: non si edita qui un `e_predefinito=True` (quello passa dall'inline
+    admin Django, o dall'UI inline cella-per-cella). Questa form e' usata
+    per aggiungere NUOVI stati custom dal tab `?tab=stati`.
+    """
+
+    class Meta:
+        model = StatoAdempimentoTipo
+        fields = [
+            "codice", "denominazione", "sigla", "colore",
+            "lavorabile", "livello", "iniziale_default", "attivo",
+        ]
+        labels = {
+            "codice": "Codice (slug, stabile)",
+            "denominazione": "Denominazione",
+            "sigla": "Sigla (3 char)",
+            "colore": "Colore badge",
+            "lavorabile": "Conta nel 'lavoro residuo'",
+            "livello": "Livello (0..100)",
+            "iniziale_default": "Stato iniziale predefinito",
+            "attivo": "Attivo",
+        }
+        help_texts = {
+            "codice": (
+                "Identificativo stabile, minuscolo, niente spazi "
+                "(es. 'archiviato'). Non rinominare dopo l'uso."
+            ),
+            "denominazione": "Etichetta mostrata all'utente (es. 'Archiviato').",
+            "sigla": "3 caratteri max per badge densi (es. 'ARC'). Opzionale.",
+            "livello": (
+                "Progressione: 0=non in scope, 100=completato. Usato anche "
+                "per sort del set."
+            ),
+            "iniziale_default": (
+                "Se True, e' lo stato di partenza per i nuovi adempimenti di "
+                "questo tipo. Uno solo a True per set."
+            ),
+        }
+        widgets = {
+            "livello": forms.NumberInput(attrs={"min": 0, "max": 100}),
         }
 
     def __init__(self, *args, **kwargs):

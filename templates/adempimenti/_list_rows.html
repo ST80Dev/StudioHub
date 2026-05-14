@@ -10,7 +10,7 @@
     <td class="px-3 tabular-nums">{{ a.anno_fiscale }}</td>
     <td class="px-3 tabular-nums">{{ a.data_scadenza|date:"d/m/Y"|default:"—" }}</td>
     <td class="px-3 text-xs">{{ a.responsabile|default:"—" }}</td>
-    <td class="px-3">{% include "adempimenti/_stato_badge.html" with stato=a.stato %}</td>
+    <td class="px-3">{% include "adempimenti/_stato_badge.html" with stato=a.stato tipo_id=a.tipo_id %}</td>
 </tr>
 {% empty %}
 <tr><td colspan="6" class="px-3 py-8 text-center text-sm text-slate-500">Nessun adempimento trovato.</td></tr>

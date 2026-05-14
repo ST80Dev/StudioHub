@@ -124,6 +124,140 @@ class ChecklistStep(models.Model):
 
 
 # ---------------------------------------------------------------------------
+# Stati adempimento — catalogo configurabile da admin
+# ---------------------------------------------------------------------------
+#
+# Sostituisce il vecchio `StatoAdempimento` TextChoices fisso. Ogni tipo
+# adempimento ha il SUO set di stati (es. LIPE puo' avere "controllato" in
+# piu' rispetto a F24); il set parte da uno "Standard" globale (editabile
+# da admin Django) che viene copiato sul tipo alla creazione, e poi e'
+# customizzabile per-tipo. Gli stati copiati dallo Standard sono marcati
+# `e_predefinito=True` e non eliminabili (UI nega la cancellazione);
+# l'utente puo' aggiungere stati custom (eliminabili).
+#
+# 3 attributi chiave per ogni stato:
+#  - `lavorabile`: conta nel residuo "da fare"? (es. da_fare=True, inviato=False)
+#  - `livello`: 0..100, progressione visiva (0=non in scope, 100=completato)
+#  - `iniziale_default`: True su un solo stato del set — stato di partenza
+#    per i nuovi adempimenti di quel tipo.
+
+class ColoreStato(models.TextChoices):
+    """Classi CSS predefinite per il badge dello stato.
+
+    Mappano sulle classi `.sh-state-*` gia' definite nel CSS globale.
+    """
+    TODO = "todo", "Da fare (grigio)"
+    WIP = "wip", "In corso (giallo)"
+    REVIEW = "review", "In revisione (azzurro)"
+    DONE = "done", "Completato (verde)"
+    IDLE = "idle", "Riposo (slate)"
+
+
+class StatoAdempimentoBase(models.Model):
+    """Campi comuni fra `StatoAdempimentoStandard` e `StatoAdempimentoTipo`.
+
+    Astratta: non genera tabella. Definita per evitare duplicazione di
+    schema fra i due modelli quasi-identici.
+    """
+    codice = models.SlugField(
+        max_length=30,
+        help_text=(
+            "Identificativo stabile (minuscolo, no spazi). Es. 'da_fare', "
+            "'controllato'. Vedi convenzione codici TextChoices in CLAUDE.md."
+        ),
+    )
+    denominazione = models.CharField(
+        max_length=60,
+        help_text="Etichetta estesa mostrata nei dropdown/form (es. 'Da fare').",
+    )
+    sigla = models.CharField(
+        max_length=3, blank=True,
+        help_text="Sigla 3 char per badge densi (es. 'FAR'). Vuoto = fallback automatico.",
+    )
+    colore = models.CharField(
+        max_length=10,
+        choices=ColoreStato.choices,
+        default=ColoreStato.TODO,
+        help_text="Classe colore del badge.",
+    )
+    lavorabile = models.BooleanField(
+        default=True,
+        help_text="Se True, conta nel 'lavoro residuo'. Se False, lo stato esce dai conteggi.",
+    )
+    livello = models.PositiveSmallIntegerField(
+        default=10,
+        help_text="0..100. Progressione: 0=non in scope, 100=completato. Anche sort.",
+    )
+    iniziale_default = models.BooleanField(
+        default=False,
+        help_text="Stato di partenza per nuovi adempimenti. Uno solo a True per set.",
+    )
+    attivo = models.BooleanField(default=True)
+
+    class Meta:
+        abstract = True
+        ordering = ("livello", "denominazione")
+
+    def __str__(self) -> str:
+        return f"{self.denominazione} ({self.codice})"
+
+
+class StatoAdempimentoStandard(StatoAdempimentoBase):
+    """Set predefinito globale degli stati.
+
+    Editabile da admin Django (sezione "Stati standard"). Quando si crea un
+    nuovo `TipoAdempimentoCatalogo`, ogni voce attiva di questo set viene
+    copiata in `StatoAdempimentoTipo` con `e_predefinito=True`.
+
+    NB: modificare lo Standard NON cambia gli stati dei tipi gia' esistenti
+    (per evitare di sovrascrivere personalizzazioni). Lo Standard impatta
+    solo le nuove copie alla creazione di un nuovo tipo.
+    """
+
+    class Meta(StatoAdempimentoBase.Meta):
+        verbose_name = "Stato standard"
+        verbose_name_plural = "Stati standard"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["codice"], name="uniq_statostd_codice",
+            ),
+        ]
+
+
+class StatoAdempimentoTipo(StatoAdempimentoBase):
+    """Stato concreto utilizzato da un `TipoAdempimentoCatalogo`.
+
+    E' la fonte di verita' a runtime per la lista di stati validi del tipo:
+    `Adempimento.stato` (CharField) deve essere uno dei `codice` di questo
+    set per quel tipo.
+
+    Voci con `e_predefinito=True` sono state copiate dallo Standard alla
+    creazione del tipo e non sono cancellabili (UI/admin negano la
+    cancellazione). L'utente puo' modificarne label/sigla/colore/livello.
+    Voci con `e_predefinito=False` sono custom per il tipo e cancellabili.
+    """
+    tipo_adempimento = models.ForeignKey(
+        TipoAdempimentoCatalogo,
+        on_delete=models.CASCADE,
+        related_name="stati",
+    )
+    e_predefinito = models.BooleanField(
+        default=False,
+        help_text="Copiato dallo Standard. Non eliminabile (modifiche sono ammesse).",
+    )
+
+    class Meta(StatoAdempimentoBase.Meta):
+        verbose_name = "Stato (per tipo)"
+        verbose_name_plural = "Stati (per tipo)"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tipo_adempimento", "codice"],
+                name="uniq_statotipo_tipo_codice",
+            ),
+        ]
+
+
+# ---------------------------------------------------------------------------
 # Regole di applicabilità (motore regole semplice)
 # ---------------------------------------------------------------------------
 
@@ -268,25 +402,23 @@ def tipi_applicabili(anagrafica) -> list[TipoAdempimentoCatalogo]:
 # ---------------------------------------------------------------------------
 
 class StatoAdempimento(models.TextChoices):
+    """Codici canonici degli stati standard (seedati al primo deploy).
+
+    NB: NON sono piu' le `choices` del field `Adempimento.stato`. La fonte
+    di verita' a runtime e' la tabella `StatoAdempimentoTipo` (per-tipo).
+    Questa enumeration sopravvive solo come *constants holder* per il
+    codice applicativo che fa riferimento ai 6 codici canonici (es.
+    `StatoAdempimento.INVIATO == "inviato"`). Aggiungere/rimuovere stati
+    NON si fa qui ma da admin Django (vedi `StatoAdempimentoStandard` per
+    il set di partenza condiviso, `StatoAdempimentoTipo` per il set
+    concreto di ciascun tipo).
+    """
     DA_FARE = "da_fare", "Da fare"
     IN_CORSO = "in_corso", "In corso"
     CHIUSA = "chiusa", "Chiusa (predisposta)"
     INVIATO = "inviato", "Inviato"
     FANNO_LORO = "fanno_loro", "Fanno loro"
     NO_DATI = "no_dati", "No dati"
-
-
-# Stati che NON contano nel "lavoro residuo" dello studio.
-STATI_LAVORABILI = {
-    StatoAdempimento.DA_FARE,
-    StatoAdempimento.IN_CORSO,
-    StatoAdempimento.CHIUSA,
-}
-STATI_NON_LAVORABILI = {
-    StatoAdempimento.INVIATO,
-    StatoAdempimento.FANNO_LORO,
-    StatoAdempimento.NO_DATI,
-}
 
 
 class Adempimento(models.Model):
@@ -320,10 +452,14 @@ class Adempimento(models.Model):
         ),
     )
     stato = models.CharField(
-        max_length=15,
-        choices=StatoAdempimento.choices,
-        default=StatoAdempimento.DA_FARE,
+        max_length=30,
+        default="da_fare",
         db_index=True,
+        help_text=(
+            "Codice di uno stato in StatoAdempimentoTipo per `tipo`. "
+            "I valori validi non sono hardcoded: si gestiscono da admin "
+            "Django o da /configurazione/tipi/<id>/?tab=stati."
+        ),
     )
     data_invio = models.DateField(null=True, blank=True)
     protocollo_invio = models.CharField(
@@ -403,9 +539,22 @@ class Adempimento(models.Model):
 
     @property
     def is_scaduto(self) -> bool:
-        if self.data_scadenza and self.stato != StatoAdempimento.INVIATO:
-            return date.today() > self.data_scadenza
-        return False
+        """Scaduto = oltre data_scadenza E stato ancora 'lavorabile'.
+
+        Usa il flag `lavorabile` dello stato (per-tipo) anziche' un check
+        sul codice 'inviato': cosi' un adempimento in stato 'fanno_loro' o
+        'no_dati' non risulta scaduto anche se passa la data, e nuovi stati
+        terminali aggiunti dall'utente (es. 'archiviato') sono gestiti senza
+        modifiche al codice. Un adempimento puo' essere inviato anche oltre
+        scadenza (con sanzioni), quindi 'inviato' termina il "lavoro residuo".
+        """
+        if not self.data_scadenza:
+            return False
+        from . import stati
+        s = stati.stato_by_codice(self.tipo_id, self.stato)
+        if s is None or not s.lavorabile:
+            return False
+        return date.today() > self.data_scadenza
 
     def calcola_data_scadenza(self):
         """Ritorna la data scadenza derivata dal tipo. Non persiste.

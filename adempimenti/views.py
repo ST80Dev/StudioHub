@@ -19,12 +19,12 @@ from anagrafica.models import (
     RuoloReferenteStudio,
 )
 
+from . import stati as _stati
 from .columns import get_columns_for_tipo
 from .models import (
     Adempimento,
-    STATI_LAVORABILI,
-    STATI_NON_LAVORABILI,
     StatoAdempimento,
+    StatoAdempimentoTipo,
     TipoAdempimentoCatalogo,
     tipi_applicabili,
 )
@@ -33,6 +33,22 @@ from .services import conta_obsoleti, sincronizza_adempimenti
 
 # Codice del tipo "Liquidazione IVA Trimestrale" (seed migration 0006).
 CODICE_LIPE = "liquidazione-iva-trimestrale"
+
+
+def _global_stati_choices() -> list[tuple[str, str]]:
+    """Choices (codice, denominazione) per la vista generica adempimenti.
+
+    Deduplica per codice. Usata solo dal dropdown della lista generica
+    (non LIPE), che non ha un tipo specifico di riferimento.
+    """
+    seen: dict[str, str] = {}
+    for codice, den in (
+        StatoAdempimentoTipo.objects.filter(attivo=True)
+        .values_list("codice", "denominazione")
+        .order_by("livello", "denominazione")
+    ):
+        seen.setdefault(codice, den)
+    return list(seen.items())
 
 
 @login_required
@@ -57,7 +73,9 @@ def lista_adempimenti(request):
         qs = qs.filter(anno_fiscale=int(anno_fiscale))
 
     stato = request.GET.get("stato", "")
-    if stato in StatoAdempimento.values:
+    # Filtro stato sulla vista generica: accetta qualsiasi codice presente
+    # in almeno un set di tipo (non vincolato a un tipo specifico).
+    if stato and StatoAdempimentoTipo.objects.filter(codice=stato).exists():
         qs = qs.filter(stato=stato)
 
     esecutore = request.GET.get("esecutore", "")
@@ -95,7 +113,10 @@ def lista_adempimenti(request):
         "stato": stato,
         "esecutore": esecutore,
         "tipi": TipoAdempimentoCatalogo.objects.filter(attivo=True),
-        "stati": StatoAdempimento.choices,
+        # Vista generica: dropdown unione di tutti i codici stato presenti
+        # in qualsiasi tipo (deduplicati). Per la lista LIPE dedicata si usa
+        # invece il set per-tipo.
+        "stati": _global_stati_choices(),
         "ruoli": RuoloReferenteStudio.choices,
         "totale": paginator.count,
     }
@@ -165,17 +186,20 @@ LIPE_SORTABLE = {
 }
 
 # Campi modificabili inline + bulk per la vista LIPE.
+# Lo stato e' un select con choices DINAMICHE dal catalogo del tipo (vedi
+# `_lipe_inline_meta`). Sentinelle ammesse per "tipo widget":
+#  - "select_stato": dropdown popolato dal catalogo stati del tipo
+#  - "date"/"text": campi liberi
 LIPE_INLINE_FIELDS = {
-    "stato":            ("select", StatoAdempimento),
-    "data_invio":       ("date",   None),
-    "protocollo_invio": ("text",   None),
-    "note":             ("text",   None),
+    "stato":            ("select_stato", None),
+    "data_invio":       ("date",         None),
+    "protocollo_invio": ("text",         None),
+    "note":             ("text",         None),
 }
-# Per la bulk update: oltre allo stato (TextChoices), si accetta
-# `protocollo_invio` con valore intero. Si usa un sentinel `int` come
-# "tipo" del campo perche' non e' un TextChoices.
+# Per la bulk update: stato (validato contro il catalogo del tipo a runtime)
+# + protocollo_invio (intero salvato come stringa).
 LIPE_BULK_FIELDS = {
-    "stato": StatoAdempimento,
+    "stato": "stato",
     "protocollo_invio": int,
 }
 
@@ -184,11 +208,19 @@ def _get_tipo_lipe():
     return get_object_or_404(TipoAdempimentoCatalogo, codice=CODICE_LIPE)
 
 
-def _lipe_inline_meta(field: str):
+def _lipe_inline_meta(field: str, tipo_id: int | None = None):
+    """Metadati per il form di edit inline di una cella LIPE.
+
+    Per `widget == 'select_stato'` la lista di scelte viene popolata
+    dinamicamente dal catalogo stati del tipo (richiede `tipo_id`).
+    """
     if field not in LIPE_INLINE_FIELDS:
         return None
-    widget, choices = LIPE_INLINE_FIELDS[field]
-    return {"name": field, "widget": widget, "choices": choices}
+    widget, _legacy = LIPE_INLINE_FIELDS[field]
+    meta = {"name": field, "widget": widget, "choices": []}
+    if widget == "select_stato" and tipo_id is not None:
+        meta["choices"] = _stati.choices(tipo_id)
+    return meta
 
 
 @login_required
@@ -252,7 +284,10 @@ def lista_lipe(request):
         qs = qs.filter(anagrafica__periodicita_iva=f_iva)
 
     f_stato = request.GET.get("f_stato") or ""
-    if f_stato in StatoAdempimento.values:
+    # Validazione contro il catalogo stati del tipo (non piu' enum hardcoded)
+    stati_tipo = _stati.stati_di_tipo(tipo.id)
+    codici_tipo = {s.codice for s in stati_tipo}
+    if f_stato in codici_tipo:
         qs = qs.filter(stato=f_stato)
 
     f_protocollo = (request.GET.get("f_protocollo") or "").strip()
@@ -267,22 +302,19 @@ def lista_lipe(request):
         sort_field = "anagrafica__denominazione"
     qs = qs.order_by(sort, "anagrafica__denominazione")
 
-    # Totali per stato (sull'intero set non filtrato dell'anno/periodo)
-    counts_raw = (
-        base_qs.values("stato").annotate(n=Count("id"))
-    )
+    # Totali per stato (sull'intero set non filtrato dell'anno/periodo).
+    # Itera sul catalogo stati del tipo (non piu' enum hardcoded).
+    counts_raw = base_qs.values("stato").annotate(n=Count("id"))
     counts = {row["stato"]: row["n"] for row in counts_raw}
     totali = []
-    for val, label in StatoAdempimento.choices:
+    for s in stati_tipo:
         totali.append({
-            "value": val,
-            "label": label,
-            "count": counts.get(val, 0),
-            "lavorabile": val in STATI_LAVORABILI,
+            "value": s.codice,
+            "label": s.denominazione,
+            "count": counts.get(s.codice, 0),
+            "lavorabile": s.lavorabile,
         })
-    totale_lavorabile = sum(
-        c["count"] for c in totali if c["lavorabile"]
-    )
+    totale_lavorabile = sum(c["count"] for c in totali if c["lavorabile"])
     totale_complessivo = sum(c["count"] for c in totali)
 
     paginator = Paginator(qs, 50)
@@ -321,7 +353,7 @@ def lista_lipe(request):
         "f_stato": f_stato,
         "f_protocollo": f_protocollo,
         # opzioni dei select
-        "stati": StatoAdempimento.choices,
+        "stati": [(s.codice, s.denominazione) for s in stati_tipo],
         "regimi": _choices_labels.get_choices("regime_contabile"),
         "periodicita": _choices_labels.get_choices("periodicita_iva"),
         "contabilita_choices": _choices_labels.get_choices("contabilita"),
@@ -390,7 +422,9 @@ def _apply_column_filter(qs, code: str, raw: str):
             anagrafica__referenti_studio__utente__last_name__icontains=raw,
         ).distinct()
     if code == "stato":
-        if raw in StatoAdempimento.values:
+        # Validazione "soft": basta che il codice esista in almeno un
+        # set per-tipo (la lista generica non e' tipo-specifica).
+        if raw and StatoAdempimentoTipo.objects.filter(codice=raw).exists():
             return qs.filter(stato=raw)
         return qs
     if code == "note":
@@ -481,12 +515,12 @@ def _render_lipe_anno(request, tipo, anno):
     for r in base_qs:
         counts[r.stato] = counts.get(r.stato, 0) + 1
     totali = []
-    for val, label in StatoAdempimento.choices:
+    for s in _stati.stati_di_tipo(tipo.id):
         totali.append({
-            "value": val,
-            "label": label,
-            "count": counts.get(val, 0),
-            "lavorabile": val in STATI_LAVORABILI,
+            "value": s.codice,
+            "label": s.denominazione,
+            "count": counts.get(s.codice, 0),
+            "lavorabile": s.lavorabile,
         })
     totale_lavorabile = sum(c["count"] for c in totali if c["lavorabile"])
     totale_complessivo = sum(c["count"] for c in totali)
@@ -525,13 +559,13 @@ def _render_lipe_anno(request, tipo, anno):
 
 @login_required
 def lipe_inline_edit_form(request, pk: int, field: str):
-    meta = _lipe_inline_meta(field)
-    if not meta:
-        return HttpResponseBadRequest("Campo non ammesso per l'edit inline.")
     riga = get_object_or_404(
         Adempimento.objects.select_related("anagrafica"),
         pk=pk, is_deleted=False,
     )
+    meta = _lipe_inline_meta(field, tipo_id=riga.tipo_id)
+    if not meta:
+        return HttpResponseBadRequest("Campo non ammesso per l'edit inline.")
     return render(
         request,
         "adempimenti/_lipe_cell_edit.html",
@@ -542,19 +576,19 @@ def lipe_inline_edit_form(request, pk: int, field: str):
 @login_required
 @require_POST
 def lipe_inline_save(request, pk: int, field: str):
-    meta = _lipe_inline_meta(field)
-    if not meta:
-        return HttpResponseBadRequest("Campo non ammesso per l'edit inline.")
     riga = get_object_or_404(
         Adempimento.objects.select_related("anagrafica"),
         pk=pk, is_deleted=False,
     )
+    meta = _lipe_inline_meta(field, tipo_id=riga.tipo_id)
+    if not meta:
+        return HttpResponseBadRequest("Campo non ammesso per l'edit inline.")
     raw = (request.POST.get("value") or "").strip()
 
-    if meta["widget"] == "select":
-        choices = meta["choices"]
-        if raw and raw not in choices.values:
-            return HttpResponseBadRequest("Valore non ammesso per il campo.")
+    if meta["widget"] == "select_stato":
+        # Valida contro il catalogo stati DEL TIPO della riga, non un enum.
+        if raw and _stati.stato_by_codice(riga.tipo_id, raw) is None:
+            return HttpResponseBadRequest("Stato non valido per questo tipo.")
     elif meta["widget"] == "date":
         if raw and len(raw) != 10:
             return HttpResponseBadRequest("Data non valida.")
@@ -583,8 +617,8 @@ def lipe_bulk_update(request):
 
     spec = LIPE_BULK_FIELDS[field]
     # `protocollo_invio`: numero intero non negativo, salvato come stringa
-    # nel CharField del modello. Le TextChoices (es. stato) sono validate
-    # contro i loro `values`.
+    # nel CharField del modello. `stato` (spec == "stato"): valida contro
+    # il catalogo del tipo LIPE.
     if spec is int:
         try:
             n = int(value)
@@ -594,11 +628,15 @@ def lipe_bulk_update(request):
             return HttpResponseBadRequest("Il numero deve essere ≥ 0.")
         db_value = str(n)
         human_value = db_value
-    else:
-        if value not in spec.values:
-            return HttpResponseBadRequest("Valore non ammesso per il campo.")
+    elif spec == "stato":
+        tipo_lipe = _get_tipo_lipe()
+        stato_obj = _stati.stato_by_codice(tipo_lipe.id, value)
+        if stato_obj is None:
+            return HttpResponseBadRequest("Stato non valido per LIPE.")
         db_value = value
-        human_value = spec(value).label
+        human_value = stato_obj.denominazione
+    else:
+        return HttpResponseBadRequest("Configurazione del campo bulk non valida.")
 
     if not ids:
         messages.warning(request, "Nessuna riga selezionata.")
@@ -633,8 +671,10 @@ def lipe_aggiungi_cliente(request):
         return HttpResponseBadRequest("Parametri non validi.")
     if periodo not in (1, 2, 3, 4):
         return HttpResponseBadRequest("Periodo non valido.")
-    stato = request.POST.get("stato") or StatoAdempimento.DA_FARE
-    if stato not in StatoAdempimento.values:
+    stato = request.POST.get("stato") or _stati.stato_default(tipo.id)
+    # Valida contro il set per-tipo (catalogo DB).
+    stato_obj = _stati.stato_by_codice(tipo.id, stato)
+    if stato_obj is None:
         return HttpResponseBadRequest("Stato non valido.")
 
     anag = get_object_or_404(Anagrafica, pk=anagrafica_id, is_deleted=False)
@@ -650,7 +690,7 @@ def lipe_aggiungi_cliente(request):
         messages.success(
             request,
             f"Aggiunta riga LIPE per {anag.denominazione} "
-            f"({anno} Q{periodo}) — stato {StatoAdempimento(stato).label}.",
+            f"({anno} Q{periodo}) — stato {stato_obj.denominazione}.",
         )
     else:
         messages.info(

@@ -46,7 +46,7 @@
                 <td class="px-3 tabular-nums">{{ a.anno_fiscale }}</td>
                 <td class="px-3 tabular-nums">{{ a.data_scadenza|date:"d/m/Y"|default:"—" }}</td>
                 <td class="px-3">
-                    {% include "adempimenti/_stato_badge.html" with stato=a.stato %}
+                    {% include "adempimenti/_stato_badge.html" with stato=a.stato tipo_id=a.tipo_id %}
                 </td>
             </tr>
             {% endfor %}
