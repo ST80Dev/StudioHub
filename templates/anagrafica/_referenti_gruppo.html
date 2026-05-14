@@ -1,10 +1,11 @@
-{# Un gruppo di referenti (per ruolo). Parametri attesi nel ctx:
-   - cliente
-   - ruolo: valore di RuoloReferenteStudio (stringa)
-   - refs: lista di AnagraficaReferenteStudio attivi del ruolo
-   - label: etichetta umana ("Contabilità" / "Consulenza")
-   - utenti_disponibili: queryset di UtenteStudio attivi
-#}
+{% comment %}
+Un gruppo di referenti (per ruolo). Parametri attesi nel ctx:
+  - cliente
+  - ruolo: valore di RuoloReferenteStudio (stringa)
+  - refs: lista di AnagraficaReferenteStudio attivi del ruolo
+  - label: etichetta umana ("Contabilità" / "Consulenza")
+  - utenti_disponibili: queryset di UtenteStudio attivi
+{% endcomment %}
 <div class="p-3">
     <div class="mb-2 flex items-center justify-between">
         <div class="text-[11px] uppercase tracking-wider text-slate-500">
