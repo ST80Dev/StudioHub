@@ -24,8 +24,9 @@
     {% include "anagrafica/_cell_display.html" with c=c field="stato" %}
     <td class="px-3 text-xs">
         {% for r in c.referenti_contabilita_attivi %}
-            <div class="truncate" title="{{ r.utente }}{% if r.principale %} (principale){% endif %}">
-                {{ r.utente }}{% if r.principale %} <span class="text-amber-500">★</span>{% endif %}
+            <div class="truncate {% if r.is_pending %}italic text-slate-500{% endif %}"
+                 title="{{ r.display_name }}{% if r.is_pending %} (importato, da collegare){% elif r.principale %} (principale){% endif %}">
+                {{ r.display_name }}{% if r.principale %} <span class="text-amber-500">★</span>{% endif %}
             </div>
         {% empty %}
             <span class="text-slate-400">—</span>
@@ -33,8 +34,9 @@
     </td>
     <td class="px-3 text-xs">
         {% for r in c.referenti_consulenza_attivi %}
-            <div class="truncate" title="{{ r.utente }}{% if r.principale %} (principale){% endif %}">
-                {{ r.utente }}{% if r.principale %} <span class="text-amber-500">★</span>{% endif %}
+            <div class="truncate {% if r.is_pending %}italic text-slate-500{% endif %}"
+                 title="{{ r.display_name }}{% if r.is_pending %} (importato, da collegare){% elif r.principale %} (principale){% endif %}">
+                {{ r.display_name }}{% if r.principale %} <span class="text-amber-500">★</span>{% endif %}
             </div>
         {% empty %}
             <span class="text-slate-400">—</span>

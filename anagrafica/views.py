@@ -289,6 +289,55 @@ def referente_chiudi(request, pk: int, rid: int):
 
 @login_required
 @require_POST
+def referente_associa(request, pk: int, rid: int):
+    """Associa un utente reale a un referente "non collegato" (raw),
+    cioe' con `utente=None` e `nome_grezzo` valorizzato.
+
+    Tipicamente quei referenti vengono dagli import quando il nome
+    dell'addetto nell'Excel non corrispondeva a nessun UtenteStudio
+    esistente. Una volta creato l'utente in admin, da qui lo si aggancia
+    al referente preservando data_inizio e ruolo. `nome_grezzo` viene
+    svuotato.
+    """
+    cliente = get_object_or_404(Anagrafica, pk=pk, is_deleted=False)
+    ref = get_object_or_404(
+        AnagraficaReferenteStudio,
+        pk=rid, anagrafica=cliente,
+        utente__isnull=True, data_fine__isnull=True,
+    )
+    utente_id = (request.POST.get("utente") or "").strip()
+    if not utente_id.isdigit():
+        return HttpResponseBadRequest("Utente non valido.")
+    User = get_user_model()
+    utente = get_object_or_404(User, pk=int(utente_id), is_active=True)
+
+    # Se c'e' gia' un referente attivo per stesso (anagrafica, utente, ruolo),
+    # chiudo la riga raw invece di duplicare: la riga "vera" ha precedenza.
+    duplicato = AnagraficaReferenteStudio.objects.filter(
+        anagrafica=cliente, utente=utente, ruolo=ref.ruolo,
+        data_fine__isnull=True,
+    ).exclude(pk=ref.pk).exists()
+    if duplicato:
+        ref.data_fine = date.today()
+        ref.save(update_fields=["data_fine"])
+        messages.info(
+            request,
+            f"{utente} era gia' referente attivo: la riga importata e' stata chiusa.",
+        )
+    else:
+        ref.utente = utente
+        ref.nome_grezzo = ""
+        ref.save(update_fields=["utente", "nome_grezzo"])
+
+    return render(
+        request,
+        "anagrafica/_referenti_section.html",
+        _referenti_section_context(cliente),
+    )
+
+
+@login_required
+@require_POST
 def referente_principale(request, pk: int, rid: int):
     """Promuove il referente a `principale` (gli altri attivi dello stesso ruolo
     perdono il flag). Se è già principale, lo toglie."""

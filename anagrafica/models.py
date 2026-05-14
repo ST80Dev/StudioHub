@@ -282,6 +282,15 @@ class AnagraficaReferenteStudio(models.Model):
     Un cliente può avere uno o più referenti di contabilità e di consulenza.
     Le righe sono storicizzate: quando cambia il referente si chiude la riga
     esistente (`data_fine`) e se ne apre una nuova.
+
+    Un referente può essere:
+    - **collegato a un utente reale** (`utente` valorizzato): comportamento
+      pieno (filtri per utente, link al profilo, ecc.);
+    - **non collegato** (`utente=None`, `nome_grezzo` valorizzato): tipico
+      degli import da Excel in cui il nome dell'addetto non corrisponde a
+      nessun `UtenteStudio` esistente. Quando l'utente reale verrà creato
+      lo si associa dal detail cliente (o in massa col management command
+      `risolvi_referenti_pending`).
     """
 
     anagrafica = models.ForeignKey(
@@ -291,6 +300,16 @@ class AnagraficaReferenteStudio(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
         related_name="anagrafiche_seguite",
+        null=True,
+        blank=True,
+        help_text="Vuoto = referente non ancora collegato a un utente del sistema "
+        "(vedi `nome_grezzo`).",
+    )
+    nome_grezzo = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="Nome libero da risolvere (popolato dagli import "
+        "quando il nome dell'addetto non corrisponde a un UtenteStudio).",
     )
     ruolo = models.CharField(max_length=30, choices=RuoloReferenteStudio.choices)
     principale = models.BooleanField(
@@ -319,10 +338,30 @@ class AnagraficaReferenteStudio(models.Model):
                 check=Q(data_fine__isnull=True) | Q(data_fine__gte=F("data_inizio")),
                 name="referente_data_fine_non_prima_di_inizio",
             ),
+            # Almeno uno fra `utente` e `nome_grezzo` deve essere valorizzato.
+            # Una riga senza nessuno dei due non avrebbe senso (referente fantasma).
+            models.CheckConstraint(
+                check=Q(utente__isnull=False) | ~Q(nome_grezzo=""),
+                name="referente_utente_o_nome_grezzo",
+            ),
         ]
 
     def __str__(self) -> str:
-        return f"{self.utente} — {self.get_ruolo_display()} di {self.anagrafica}"
+        chi = self.utente or self.nome_grezzo or "?"
+        return f"{chi} — {self.get_ruolo_display()} di {self.anagrafica}"
+
+    @property
+    def display_name(self) -> str:
+        """Etichetta da mostrare in UI: utente reale se collegato, altrimenti
+        il nome grezzo importato."""
+        if self.utente_id:
+            return str(self.utente)
+        return self.nome_grezzo or "?"
+
+    @property
+    def is_pending(self) -> bool:
+        """True se il referente non e' ancora collegato a un utente reale."""
+        return self.utente_id is None
 
 
 class TipoLegame(models.TextChoices):
