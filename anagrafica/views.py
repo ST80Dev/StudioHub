@@ -73,6 +73,10 @@ def lista_clienti(request):
     if f_iva in PeriodicitaIVA.values:
         queryset = queryset.filter(periodicita_iva=f_iva)
 
+    f_contab = request.GET.get("f_contab", "")
+    if f_contab in GestioneContabilita.values:
+        queryset = queryset.filter(contabilita=f_contab)
+
     # Filtro "Da completare": anagrafiche con denominazione o tipo_soggetto
     # vuoti (tipicamente create da import permissivo). Utile per identificare
     # in fretta cosa va sistemato.
@@ -92,7 +96,7 @@ def lista_clienti(request):
     SORTABLE = {
         "codice_interno", "denominazione", "tipo_soggetto",
         "codice_fiscale", "partita_iva", "regime_contabile",
-        "periodicita_iva", "stato",
+        "periodicita_iva", "contabilita", "stato",
     }
     sort = request.GET.get("sort", "denominazione")
     sort_field = sort.lstrip("-")
@@ -117,6 +121,7 @@ def lista_clienti(request):
         "f_stato": f_stato,
         "f_regime": f_regime,
         "f_iva": f_iva,
+        "f_contab": f_contab,
         "f_incompleto": f_incompleto,
         "n_incomplete": n_incomplete,
         # back-compat (sidebar/altri callers che ancora usano i nomi vecchi)
