@@ -57,35 +57,7 @@
     {% include "anagrafica/_categorie_box.html" with cliente=cliente categorie_assegnate=categorie_assegnate %}
 </div>
 
-<div class="mt-4 rounded-md border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-    <div class="flex items-center justify-between border-b border-slate-200 px-3 py-2 dark:border-slate-800">
-        <span class="text-sm font-medium">Referenti studio attivi</span>
-    </div>
-    {% if referenti_attivi %}
-    <table class="sh-table w-full text-sm">
-        <thead>
-            <tr class="text-left text-[11px] uppercase tracking-wider text-slate-500">
-                <th class="px-3">Utente</th>
-                <th class="px-3">Ruolo</th>
-                <th class="px-3">Principale</th>
-                <th class="px-3">Dal</th>
-            </tr>
-        </thead>
-        <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
-            {% for r in referenti_attivi %}
-            <tr>
-                <td class="px-3">{{ r.utente }}</td>
-                <td class="px-3">{{ r.get_ruolo_display }}</td>
-                <td class="px-3">{% if r.principale %}★{% endif %}</td>
-                <td class="px-3 font-mono text-xs">{{ r.data_inizio|date:"d/m/Y" }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    {% else %}
-    <div class="px-3 py-4 text-sm text-slate-500">Nessun referente attivo.</div>
-    {% endif %}
-</div>
+{% include "anagrafica/_referenti_section.html" %}
 
 {% if legami %}
 <div class="mt-4 rounded-md border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">

@@ -30,7 +30,7 @@
         <div class="mb-2 text-[11px] uppercase tracking-wider text-slate-500">Referenti del cliente ({{ adempimento.anno_fiscale }})</div>
         <div class="text-sm">
             <div class="mb-2">
-                <div class="text-xs text-slate-500">Addetto contabilità</div>
+                <div class="text-xs text-slate-500">Referente contabilità</div>
                 {% for r in addetti %}
                     <div>{{ r.utente }}{% if r.principale %} ★{% endif %}</div>
                 {% empty %}
@@ -38,7 +38,7 @@
                 {% endfor %}
             </div>
             <div>
-                <div class="text-xs text-slate-500">Responsabile consulenza</div>
+                <div class="text-xs text-slate-500">Referente consulenza</div>
                 {% for r in consulenti %}
                     <div>{{ r.utente }}{% if r.principale %} ★{% endif %}</div>
                 {% empty %}

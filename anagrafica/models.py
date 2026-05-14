@@ -246,18 +246,42 @@ class Anagrafica(models.Model):
         from .choices_labels import get_label
         return get_label("contabilita", self.contabilita)
 
+    def _referenti_attivi_iter(self):
+        # Usa il Prefetch `referenti_attivi` se presente (lista_clienti),
+        # altrimenti interroga il DB.
+        cached = getattr(self, "referenti_attivi", None)
+        if cached is not None:
+            return cached
+        return list(
+            self.referenti_studio.filter(data_fine__isnull=True).select_related("utente")
+        )
+
+    @property
+    def referenti_contabilita_attivi(self):
+        return [
+            r for r in self._referenti_attivi_iter()
+            if r.ruolo == "referente_contabilita"
+        ]
+
+    @property
+    def referenti_consulenza_attivi(self):
+        return [
+            r for r in self._referenti_attivi_iter()
+            if r.ruolo == "referente_consulenza"
+        ]
+
 
 class RuoloReferenteStudio(models.TextChoices):
-    ADDETTO_CONTABILITA = "addetto_contabilita", "Addetto contabilità"
-    RESPONSABILE_CONSULENZA = "responsabile_consulenza", "Responsabile consulenza"
+    REFERENTE_CONTABILITA = "referente_contabilita", "Referente contabilità"
+    REFERENTE_CONSULENZA = "referente_consulenza", "Referente consulenza"
 
 
 class AnagraficaReferenteStudio(models.Model):
     """Referente interno dello studio per un cliente (storicizzato).
 
-    Un cliente può avere 1-2 addetti contabilità e 1-2 responsabili consulenza.
+    Un cliente può avere uno o più referenti di contabilità e di consulenza.
     Le righe sono storicizzate: quando cambia il referente si chiude la riga
-    esistente (`data_fine`) e si apre una nuova.
+    esistente (`data_fine`) e se ne apre una nuova.
     """
 
     anagrafica = models.ForeignKey(
