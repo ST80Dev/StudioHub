@@ -1,0 +1,33 @@
+{% comment %}
+Box delle categorie (tag) di un'anagrafica.
+- Chip cliccabili per le categorie già assegnate (X per rimuovere).
+- Input di ricerca con autocompletamento HTMX → suggerimenti + crea-nuova.
+{% endcomment %}
+<div id="categorie-box-{{ cliente.pk }}" class="space-y-2">
+  <div class="flex flex-wrap items-center gap-1">
+    {% for cat in categorie_assegnate %}
+      <span class="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs dark:border-slate-700 dark:bg-slate-800"
+            {% if cat.colore %}style="background-color: {{ cat.colore }}1a; border-color: {{ cat.colore }}66;"{% endif %}>
+        <span>{{ cat.denominazione }}</span>
+        <button type="button"
+                hx-post="{% url 'anagrafica:categorie_rimuovi' cliente.pk cat.pk %}"
+                hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                hx-target="#categorie-box-{{ cliente.pk }}"
+                hx-swap="outerHTML"
+                title="Rimuovi categoria"
+                class="text-slate-400 hover:text-red-600">×</button>
+      </span>
+    {% empty %}
+      <span class="text-xs text-slate-400">Nessuna categoria assegnata.</span>
+    {% endfor %}
+  </div>
+
+  <div class="relative">
+    <input type="text" name="q" placeholder="Cerca o crea categoria…"
+           hx-get="{% url 'anagrafica:categorie_search' cliente.pk %}"
+           hx-trigger="keyup changed delay:200ms"
+           hx-target="#categorie-suggest-{{ cliente.pk }}"
+           class="w-full rounded border-slate-300 px-2 py-1 text-sm dark:bg-slate-800 dark:border-slate-700">
+    <div id="categorie-suggest-{{ cliente.pk }}" class="mt-1"></div>
+  </div>
+</div>

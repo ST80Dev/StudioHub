@@ -1,0 +1,27 @@
+{% if q and not risultati %}
+  <div class="px-3 py-2 text-xs text-slate-500">Nessun cliente trovato per "{{ q }}".</div>
+{% else %}
+  <ul class="divide-y divide-slate-100 dark:divide-slate-800">
+    {% for c in risultati %}
+    <li>
+      <button type="button"
+              onclick="
+                this.closest('form').querySelector('[name=anagrafica_id]')?.remove();
+                const h = document.createElement('input');
+                h.type = 'hidden'; h.name = 'anagrafica_id'; h.value = '{{ c.pk }}';
+                this.closest('form').appendChild(h);
+                document.getElementById('lipe-selected').textContent = '{{ c.denominazione|escapejs }}';
+              "
+              class="block w-full text-left px-3 py-1.5 text-sm hover:bg-slate-50 dark:hover:bg-slate-800">
+        <span class="font-medium">{{ c.denominazione }}</span>
+        <span class="ml-2 font-mono text-[11px] text-slate-500">{{ c.codice_interno }}</span>
+        {% if c.codice_fiscale %}<span class="ml-2 font-mono text-[11px] text-slate-400">CF {{ c.codice_fiscale }}</span>{% endif %}
+        {% if c.partita_iva %}<span class="ml-2 font-mono text-[11px] text-slate-400">P.IVA {{ c.partita_iva }}</span>{% endif %}
+      </button>
+    </li>
+    {% endfor %}
+  </ul>
+{% endif %}
+<div class="border-t border-slate-200 px-3 py-1 text-[11px] text-slate-500 dark:border-slate-700">
+  Selezionato: <strong id="lipe-selected">—</strong>
+</div>

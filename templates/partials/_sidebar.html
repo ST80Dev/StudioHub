@@ -20,8 +20,13 @@
         </a>
         <a href="{% url 'adempimenti:list' %}"
            class="flex items-center gap-2 px-4 py-2 hover:bg-slate-100 dark:hover:bg-slate-800
-                  {% if '/adempimenti/' in path %}bg-slate-100 font-medium text-brand-700 dark:bg-slate-800 dark:text-brand-500{% endif %}">
+                  {% if path == '/adempimenti/' %}bg-slate-100 font-medium text-brand-700 dark:bg-slate-800 dark:text-brand-500{% endif %}">
             <span aria-hidden="true">📋</span> Adempimenti
+        </a>
+        <a href="{% url 'adempimenti:lipe' %}"
+           class="flex items-center gap-2 px-6 py-1.5 text-[13px] hover:bg-slate-100 dark:hover:bg-slate-800
+                  {% if '/liquidazione-iva-trimestrale/' in path %}bg-slate-100 font-medium text-brand-700 dark:bg-slate-800 dark:text-brand-500{% endif %}">
+            <span aria-hidden="true">🧾</span> Liquidazione IVA Trim.
         </a>
         <div class="mt-6 px-4 text-[11px] uppercase tracking-wider text-slate-400">In arrivo</div>
         <span class="flex items-center gap-2 px-4 py-2 text-slate-400">

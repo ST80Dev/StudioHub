@@ -7,9 +7,12 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
+from django.utils.text import slugify
+
 from .forms import AnagraficaForm
 from .models import (
     Anagrafica,
+    Categoria,
     GestioneContabilita,
     PeriodicitaIVA,
     RegimeContabile,
@@ -133,8 +136,94 @@ def dettaglio_cliente(request, pk: int):
                 data_fine__isnull=True
             ).select_related("utente"),
             "legami": cliente.legami_da.select_related("anagrafica_collegata"),
+            "categorie_assegnate": cliente.categorie.filter(attiva=True),
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# Categorie (tag) sull'anagrafica
+# ---------------------------------------------------------------------------
+#
+# UI a chip con autocompletamento HTMX. L'utente digita; mostriamo le categorie
+# esistenti che fanno match (auto-proposizione dei valori già usati) + opzione
+# "crea nuova" se nessun match esatto. Click → assegna al cliente. La rimozione
+# è il click sulla X del chip già presente.
+
+def _render_categorie_box(request, cliente: Anagrafica):
+    return render(
+        request,
+        "anagrafica/_categorie_box.html",
+        {"cliente": cliente, "categorie_assegnate": cliente.categorie.filter(attiva=True)},
+    )
+
+
+@login_required
+def categorie_search(request, pk: int):
+    """Suggerimenti di categorie per autocompletamento sull'anagrafica."""
+    cliente = get_object_or_404(Anagrafica, pk=pk, is_deleted=False)
+    q = (request.GET.get("q") or "").strip()
+    suggerimenti = []
+    esatto = None
+    if q:
+        gia_assegnate_ids = list(cliente.categorie.values_list("pk", flat=True))
+        suggerimenti = list(
+            Categoria.objects.filter(attiva=True)
+            .filter(
+                Q(denominazione__icontains=q) | Q(slug__icontains=slugify(q))
+            )
+            .exclude(pk__in=gia_assegnate_ids)
+            .order_by("denominazione")[:15]
+        )
+        esatto = Categoria.objects.filter(
+            slug=slugify(q)
+        ).first()
+    return render(
+        request,
+        "anagrafica/_categorie_suggest.html",
+        {
+            "cliente": cliente,
+            "q": q,
+            "suggerimenti": suggerimenti,
+            "esatto": esatto,
+        },
+    )
+
+
+@login_required
+@require_POST
+def categorie_assegna(request, pk: int):
+    """Assegna una categoria al cliente. Crea nuova se 'q' non matcha alcun slug."""
+    cliente = get_object_or_404(Anagrafica, pk=pk, is_deleted=False)
+    cat_id = request.POST.get("categoria_id")
+    nuovo_nome = (request.POST.get("nuovo_nome") or "").strip()
+
+    cat = None
+    if cat_id and cat_id.isdigit():
+        cat = Categoria.objects.filter(pk=int(cat_id), attiva=True).first()
+    elif nuovo_nome:
+        slug = slugify(nuovo_nome)[:40]
+        if not slug:
+            return HttpResponseBadRequest("Nome categoria non valido.")
+        cat, _created = Categoria.objects.get_or_create(
+            slug=slug,
+            defaults={"denominazione": nuovo_nome[:80]},
+        )
+
+    if not cat:
+        return HttpResponseBadRequest("Categoria non specificata.")
+
+    cliente.categorie.add(cat)
+    return _render_categorie_box(request, cliente)
+
+
+@login_required
+@require_POST
+def categorie_rimuovi(request, pk: int, cat_pk: int):
+    cliente = get_object_or_404(Anagrafica, pk=pk, is_deleted=False)
+    cat = get_object_or_404(Categoria, pk=cat_pk)
+    cliente.categorie.remove(cat)
+    return _render_categorie_box(request, cliente)
 
 
 @login_required

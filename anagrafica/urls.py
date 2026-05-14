@@ -13,4 +13,8 @@ urlpatterns = [
     path("<int:pk>/modifica/", views.modifica_cliente, name="edit"),
     path("<int:pk>/inline/<str:field>/edit/", views.inline_edit_form, name="inline_edit_form"),
     path("<int:pk>/inline/<str:field>/", views.inline_save, name="inline_save"),
+    # Categorie (tag) sull'anagrafica
+    path("<int:pk>/categorie/cerca/", views.categorie_search, name="categorie_search"),
+    path("<int:pk>/categorie/assegna/", views.categorie_assegna, name="categorie_assegna"),
+    path("<int:pk>/categorie/<int:cat_pk>/rimuovi/", views.categorie_rimuovi, name="categorie_rimuovi"),
 ]

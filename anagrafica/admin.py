@@ -4,6 +4,7 @@ from .models import (
     Anagrafica,
     AnagraficaLegame,
     AnagraficaReferenteStudio,
+    Categoria,
 )
 
 
@@ -40,6 +41,7 @@ class AnagraficaAdmin(admin.ModelAdmin):
         "nome",
     )
     inlines = [ReferenteStudioInline, LegameInline]
+    filter_horizontal = ("categorie",)
     fieldsets = (
         (
             "Identificazione",
@@ -89,10 +91,19 @@ class AnagraficaAdmin(admin.ModelAdmin):
                     "iscritto_cciaa",
                     "data_fine_esercizio",
                     "categoria_professione",
+                    "categorie",
                 ),
             },
         ),
     )
+
+
+@admin.register(Categoria)
+class CategoriaAdmin(admin.ModelAdmin):
+    list_display = ("slug", "denominazione", "attiva", "colore", "created_at")
+    list_filter = ("attiva",)
+    search_fields = ("slug", "denominazione", "descrizione")
+    prepopulated_fields = {"slug": ("denominazione",)}
 
 
 @admin.register(AnagraficaReferenteStudio)

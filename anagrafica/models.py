@@ -58,6 +58,30 @@ class GestioneContabilita(models.TextChoices):
     ESTERNA = "esterna", "Esterna"
 
 
+class Categoria(models.Model):
+    """Tag categoriale per anagrafica.
+
+    Insieme di etichette riusabili (es. 'sanitaria-esente', 'agricolo',
+    'ente-non-commerciale') per marcare specificità del soggetto utili
+    al motore regole degli adempimenti e ai filtri di lista.
+    """
+
+    slug = models.SlugField(max_length=40, unique=True)
+    denominazione = models.CharField(max_length=80)
+    colore = models.CharField(max_length=20, blank=True)
+    descrizione = models.CharField(max_length=200, blank=True)
+    attiva = models.BooleanField(default=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("denominazione",)
+        verbose_name = "Categoria anagrafica"
+        verbose_name_plural = "Categorie anagrafica"
+
+    def __str__(self) -> str:
+        return self.denominazione
+
+
 class Anagrafica(models.Model):
     """Anagrafica unica del cliente (PF / PG / Ente), discriminata da `tipo_soggetto`.
 
@@ -155,7 +179,17 @@ class Anagrafica(models.Model):
     )
     categoria_professione = models.CharField(
         max_length=60, blank=True,
-        help_text="Es: 'sanitaria'. Usato per regole tipo STS.",
+        help_text=(
+            "DEPRECATO: usare il M2M `categorie`. Mantenuto per compatibilità "
+            "con regole legacy. La data-migration 0005 popola `categorie` dai "
+            "valori storici."
+        ),
+    )
+    categorie = models.ManyToManyField(
+        Categoria,
+        blank=True,
+        related_name="anagrafiche",
+        help_text="Tag categoriali per marcare specificità del soggetto.",
     )
 
     # Specifici PF (valorizzati solo se tipo in PF/PROFEX/DI)

@@ -260,7 +260,15 @@ def matrice(request):
 
     casistiche = []
     for cas in CASISTICHE_TIPICHE:
-        cliente_fittizio = Anagrafica(**cas["profilo"])
+        # Estrai 'categorie' (lista di slug, virtuale per le casistiche
+        # fittizie) per non passarla al costruttore Anagrafica come kwarg.
+        profilo = dict(cas["profilo"])
+        slugs_categorie = profilo.pop("categorie", [])
+        cliente_fittizio = Anagrafica(**profilo)
+        # Espone le categorie come iterable di slug via attributo privato:
+        # il motore regole sa preferire `_categorie_slugs` per istanze
+        # fittizie senza pk (vedi RegolaApplicabilita._ha_categoria).
+        cliente_fittizio._categorie_slugs = list(slugs_categorie)
         applicabili = {t.id for t in tipi_applicabili(cliente_fittizio)}
         casistiche.append({
             "nome": cas["nome"],
