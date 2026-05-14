@@ -53,6 +53,8 @@ def normalize_denominazione(s: str) -> str:
     """Normalizza una denominazione per confronti esatti/fuzzy."""
     if not s:
         return ""
+    if str(s).strip() in _GARBAGE_VALUES:
+        return ""
     out = s.upper()
     out = _PARENS.sub(" ", out)
     out = _SUFFIX_SOCIETARI.sub(" ", out)
@@ -61,11 +63,22 @@ def normalize_denominazione(s: str) -> str:
     return out
 
 
+# Valori "spazzatura" Excel da trattare come stringa vuota.
+# Allineato con `importazione.apply._GARBAGE_VALUES`.
+_GARBAGE_VALUES = frozenset({
+    "#N/A", "#NA", "#NUM!", "#NULL!", "#REF!", "#VALUE!", "#DIV/0!", "#NAME?",
+    "N/A", "NA", "NULL", "null", "None", "-", "—", "–", "n.d.", "N.D.", "nd",
+})
+
+
 def _clean_codice(value: str) -> str:
-    """Rimuove decimali e spazi da un codice (es. '266.0' -> '266')."""
+    """Rimuove decimali e spazi da un codice (es. '266.0' -> '266').
+    Restituisce '' anche per i placeholder spazzatura tipo '#N/A'."""
     if not value:
         return ""
     v = str(value).strip()
+    if v in _GARBAGE_VALUES:
+        return ""
     if v.endswith(".0"):
         v = v[:-2]
     return v

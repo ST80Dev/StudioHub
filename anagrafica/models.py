@@ -68,7 +68,7 @@ class Anagrafica(models.Model):
 
     codice_interno = models.CharField(max_length=16, unique=True)
     tipo_soggetto = models.CharField(
-        max_length=8, choices=TipoSoggetto.choices, db_index=True
+        max_length=8, choices=TipoSoggetto.choices, db_index=True, blank=True
     )
     denominazione = models.CharField(max_length=255, db_index=True)
 
