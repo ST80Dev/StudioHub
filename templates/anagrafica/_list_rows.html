@@ -5,7 +5,15 @@
     </td>
     {% include "anagrafica/_cell_display.html" with c=c field="codice_interno" %}
     <td class="px-3">
-        <a href="{{ c.get_absolute_url }}" class="font-medium hover:underline">{{ c.denominazione }}</a>
+        <a href="{{ c.get_absolute_url }}" class="font-medium hover:underline">
+            {% if c.denominazione %}{{ c.denominazione }}{% else %}<span class="italic text-slate-400">(senza denominazione)</span>{% endif %}
+        </a>
+        {% if not c.denominazione or not c.tipo_soggetto %}
+            <span class="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800"
+                  title="Mancano dati obbligatori (denominazione e/o tipo soggetto). Modifica l'anagrafica per completarli.">
+                incompleta
+            </span>
+        {% endif %}
     </td>
     {% include "anagrafica/_cell_display.html" with c=c field="tipo_soggetto" %}
     {% include "anagrafica/_cell_display.html" with c=c field="codice_fiscale" %}

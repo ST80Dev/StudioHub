@@ -70,6 +70,20 @@ def lista_clienti(request):
     if f_iva in PeriodicitaIVA.values:
         queryset = queryset.filter(periodicita_iva=f_iva)
 
+    # Filtro "Da completare": anagrafiche con denominazione o tipo_soggetto
+    # vuoti (tipicamente create da import permissivo). Utile per identificare
+    # in fretta cosa va sistemato.
+    f_incompleto = request.GET.get("f_incompleto", "")
+    if f_incompleto == "1":
+        queryset = queryset.filter(Q(denominazione="") | Q(tipo_soggetto=""))
+
+    # Conteggio anagrafiche incomplete (sempre disponibile per il chip).
+    n_incomplete = (
+        Anagrafica.objects.filter(is_deleted=False)
+        .filter(Q(denominazione="") | Q(tipo_soggetto=""))
+        .count()
+    )
+
     # Ordinamento. Whitelist dei campi sortabili (sicurezza: no order_by
     # su qualsiasi attributo, evita raw SQL injection di lookup esotici).
     SORTABLE = {
@@ -100,6 +114,8 @@ def lista_clienti(request):
         "f_stato": f_stato,
         "f_regime": f_regime,
         "f_iva": f_iva,
+        "f_incompleto": f_incompleto,
+        "n_incomplete": n_incomplete,
         # back-compat (sidebar/altri callers che ancora usano i nomi vecchi)
         "tipo": f_tipo,
         "stato": f_stato,
