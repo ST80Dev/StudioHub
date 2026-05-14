@@ -10,7 +10,7 @@
             {{ r.anagrafica.denominazione }}
         </a>
     </td>
-    <td class="px-3 text-xs" title="{{ r.anagrafica.get_contabilita_display }}">{{ r.anagrafica.contabilita|contab_abbr }}</td>
+    <td class="px-3 text-xs" title="{{ r.anagrafica.get_contabilita_display }}">{{ r.anagrafica.contabilita|micro_label:"contabilita" }}</td>
     <td class="px-3 text-xs">{{ r.anagrafica.get_regime_contabile_display|default:"—" }}</td>
     <td class="px-3 text-xs">{{ r.anagrafica.get_periodicita_iva_display|default:"—" }}</td>
     {% include "adempimenti/_lipe_cell_display.html" with r=r field="stato" %}

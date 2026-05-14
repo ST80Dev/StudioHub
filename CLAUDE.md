@@ -31,6 +31,38 @@
 - Porte pubbliche 80/443 già occupate da NethServer (replica server
   documentale) → decisione deferred su porta esterna per StudioHub.
 
+## Convenzione codici TextChoices
+
+Regola: **i codici nel DB sono sempre in minuscolo, senza spazi**
+(es. `interna`, `ordinario`, `srl`, `profex`). Sono identificatori
+semantici stabili, *non* etichette: l'aspetto visivo si gestisce
+con le label, non rinominando i codici.
+
+3 livelli di etichetta su `TextChoiceLabel` (modificabili da admin a
+`/admin/anagrafica/textchoicelabel/`):
+
+1. **`codice`** — identificativo stabile per DB, URL, regole
+   (`regime_contabile = 'forfettario'`). Non rinominare salvo migration.
+2. **`label_micro`** — sigla 3 char per celle dense / badge
+   (`INT`, `EST`, `SRL`). Configurabile; fallback automatico alle prime 3
+   lettere upper di `label` se vuoto. Uso template:
+   `{{ codice|micro_label:'<field>' }}`.
+3. **`label`** — etichetta estesa per form e dropdown filtri
+   (`Interna (tenuta dallo studio)`). Uso template (statico):
+   `{{ obj.get_<field>_display }}`, oppure (dinamico):
+   `{{ codice|label_for:'<field>' }}`.
+
+Helper Python: `anagrafica.choices_labels.get_label(field, codice)`,
+`get_micro_label(field, codice)`, `get_choices(field)`,
+`get_choices_micro(field)`.
+
+Quando si aggiunge un nuovo campo TextChoices al modello:
+- definirlo con codici minuscoli;
+- aggiungerlo a `_get_textchoices()` in `anagrafica/choices_labels.py`;
+- aggiungere una migration RunPython che popola `TextChoiceLabel` con
+  `(field, codice, label, label_micro, ordine)` per ciascun valore;
+- aggiungerlo a `TextChoiceLabel.FIELD_CHOICES` in `models.py`.
+
 ## Pattern UI per liste/tabelle
 
 Quando si costruisce una nuova lista/tabella di record (clienti,

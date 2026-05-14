@@ -1,28 +1,39 @@
 from django import template
 
+from anagrafica import choices_labels
+
 register = template.Library()
 
 
-# Abbreviazioni compatte per la colonna "Contabilità" nelle liste degli
-# adempimenti. Le label canoniche ("Interna (tenuta dallo studio)" /
-# "Esterna") sono troppo lunghe per le celle di una tabella densa: nelle
-# liste mostriamo "INT" / "EST". Centralizzato qui per essere usato da
-# tutte le tabelle adempimenti (vedi CLAUDE.md).
-_CONTAB_ABBR = {"interna": "INT", "esterna": "EST"}
+@register.filter
+def micro_label(codice, field):
+    """Sigla 3 char per un codice (es. 'INT' per 'interna').
+
+    Uso nei template: `{{ c.contabilita|micro_label:'contabilita' }}`.
+    Legge `TextChoiceLabel.label_micro` (configurabile da admin) con
+    fallback automatico dalle prime 3 lettere della label estesa. Vedi
+    `anagrafica.choices_labels.get_micro_label`.
+
+    Convenzione "3 livelli di etichetta": codice DB (`interna`) → micro
+    (`INT`, celle dense) → label estesa (`Interna (tenuta dallo studio)`,
+    form e dropdown). Vedi CLAUDE.md.
+    """
+    if codice is None or codice == "":
+        return "—"
+    return choices_labels.get_micro_label(field, codice) or "—"
 
 
 @register.filter
-def contab_abbr(value):
-    """Abbrevia un codice GestioneContabilita in 'INT' / 'EST'.
+def label_for(codice, field):
+    """Label estesa override-aware per un codice.
 
-    Accetta sia il codice raw (`'interna'`) sia l'istanza Anagrafica
-    (legge `value.contabilita`). Fallback al codice stesso se non
-    riconosciuto, "—" se vuoto.
+    Uso: `{{ c.stato|label_for:'stato' }}`. Equivalente a
+    `c.get_stato_display()` ma usabile da template generici che ricevono
+    il field name come parametro.
     """
-    if value is None or value == "":
-        return "—"
-    code = getattr(value, "contabilita", value)
-    return _CONTAB_ABBR.get(code, code or "—")
+    if codice is None or codice == "":
+        return ""
+    return choices_labels.get_label(field, codice)
 
 
 @register.filter

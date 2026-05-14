@@ -97,7 +97,7 @@ CASISTICHE_TIPICHE = [
     {
         "nome": "SRL ordinaria · IVA mensile · CCIAA · Sostituto",
         "profilo": dict(
-            tipo_soggetto="SRL",
+            tipo_soggetto="srl",
             regime_contabile="ordinario",
             periodicita_iva="mensile",
             contabilita="esterna",
@@ -109,7 +109,7 @@ CASISTICHE_TIPICHE = [
     {
         "nome": "SRL ordinaria · IVA trimestrale · CCIAA · Sostituto",
         "profilo": dict(
-            tipo_soggetto="SRL",
+            tipo_soggetto="srl",
             regime_contabile="ordinario",
             periodicita_iva="trimestrale",
             contabilita="esterna",
@@ -121,7 +121,7 @@ CASISTICHE_TIPICHE = [
     {
         "nome": "SPA · IVA mensile · CCIAA · Sostituto",
         "profilo": dict(
-            tipo_soggetto="SPA",
+            tipo_soggetto="spa",
             regime_contabile="ordinario",
             periodicita_iva="mensile",
             contabilita="esterna",
@@ -133,7 +133,7 @@ CASISTICHE_TIPICHE = [
     {
         "nome": "SAS · IVA trimestrale · CCIAA",
         "profilo": dict(
-            tipo_soggetto="SAS",
+            tipo_soggetto="sas",
             regime_contabile="ordinario",
             periodicita_iva="trimestrale",
             contabilita="esterna",
@@ -145,7 +145,7 @@ CASISTICHE_TIPICHE = [
     {
         "nome": "SNC · IVA trimestrale · CCIAA",
         "profilo": dict(
-            tipo_soggetto="SNC",
+            tipo_soggetto="snc",
             regime_contabile="ordinario",
             periodicita_iva="trimestrale",
             contabilita="esterna",
@@ -157,7 +157,7 @@ CASISTICHE_TIPICHE = [
     {
         "nome": "DI ordinaria · IVA trimestrale · CCIAA",
         "profilo": dict(
-            tipo_soggetto="DI",
+            tipo_soggetto="di",
             regime_contabile="ordinario",
             periodicita_iva="trimestrale",
             contabilita="esterna",
@@ -169,7 +169,7 @@ CASISTICHE_TIPICHE = [
     {
         "nome": "DI semplificata · IVA trimestrale · CCIAA",
         "profilo": dict(
-            tipo_soggetto="DI",
+            tipo_soggetto="di",
             regime_contabile="semplificato",
             periodicita_iva="trimestrale",
             contabilita="esterna",
@@ -181,7 +181,7 @@ CASISTICHE_TIPICHE = [
     {
         "nome": "DI forfettaria · No IVA · CCIAA",
         "profilo": dict(
-            tipo_soggetto="DI",
+            tipo_soggetto="di",
             regime_contabile="forfettario",
             periodicita_iva="non_soggetto",
             contabilita="esterna",
@@ -193,7 +193,7 @@ CASISTICHE_TIPICHE = [
     {
         "nome": "Professionista ordinario · IVA trimestrale",
         "profilo": dict(
-            tipo_soggetto="PROFEX",
+            tipo_soggetto="profex",
             regime_contabile="ordinario",
             periodicita_iva="trimestrale",
             contabilita="esterna",
@@ -205,7 +205,7 @@ CASISTICHE_TIPICHE = [
     {
         "nome": "Professionista forfettario · No IVA",
         "profilo": dict(
-            tipo_soggetto="PROFEX",
+            tipo_soggetto="profex",
             regime_contabile="forfettario",
             periodicita_iva="non_soggetto",
             contabilita="esterna",
@@ -217,7 +217,7 @@ CASISTICHE_TIPICHE = [
     {
         "nome": "Professionista sanitario · IVA trimestrale",
         "profilo": dict(
-            tipo_soggetto="PROFEX",
+            tipo_soggetto="profex",
             regime_contabile="ordinario",
             periodicita_iva="trimestrale",
             contabilita="esterna",
@@ -230,7 +230,7 @@ CASISTICHE_TIPICHE = [
     {
         "nome": "Persona fisica privata · No IVA",
         "profilo": dict(
-            tipo_soggetto="PF",
+            tipo_soggetto="pf",
             regime_contabile="non_applicabile",
             periodicita_iva="non_soggetto",
             contabilita="esterna",
@@ -242,7 +242,7 @@ CASISTICHE_TIPICHE = [
     {
         "nome": "Associazione · IVA trimestrale · No CCIAA",
         "profilo": dict(
-            tipo_soggetto="ASS",
+            tipo_soggetto="ass",
             regime_contabile="ordinario",
             periodicita_iva="trimestrale",
             contabilita="esterna",

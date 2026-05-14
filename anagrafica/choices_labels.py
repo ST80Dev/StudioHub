@@ -3,8 +3,10 @@
 L'utente puo' modificare le label da Django admin
 (/admin/anagrafica/textchoicelabel/). Questo modulo espone:
 
-- `get_label(field, codice)`: label override-aware con fallback al default
-   delle TextChoices del modello Anagrafica
+- `get_label(field, codice)`: label estesa override-aware con fallback al
+   default delle TextChoices del modello Anagrafica
+- `get_micro_label(field, codice)`: sigla 3 char per celle/badge densi.
+   Fallback automatico: prime 3 lettere upper della label.
 - `get_choices(field)`: lista `[(codice, label), ...]` ordinata per `ordine`
    override-aware. Sostituisce `<TextChoices>.choices` nei contesti dei
    template/form.
@@ -37,17 +39,27 @@ def _get_textchoices(field: str):
     }.get(field)
 
 
-_cache: dict[str, list[tuple[str, str]]] = {}
+# Entry della cache: una tripla (codice, label, label_micro). Il micro
+# puo' essere "" — in quel caso `get_micro_label` calcola il fallback.
+_cache: dict[str, list[tuple[str, str, str]]] = {}
 _cache_lock = Lock()
 
 
-def _build_cache(field: str) -> list[tuple[str, str]]:
-    """Costruisce la lista [(codice, label), ...] per il campo dato.
+def _micro_fallback(label: str) -> str:
+    """Sigla 3 char dalle prime 3 lettere alfanumeriche di `label`."""
+    if not label:
+        return ""
+    pulito = "".join(ch for ch in label if ch.isalnum())
+    return pulito[:3].upper()
+
+
+def _build_cache(field: str) -> list[tuple[str, str, str]]:
+    """Costruisce la lista [(codice, label, label_micro), ...] per il campo.
 
     1. Parte dai valori canonici delle TextChoices del modello (fallback).
-    2. Sovrascrive le label con quelle di TextChoiceLabel se presenti.
+    2. Sovrascrive label/micro con quelle di TextChoiceLabel se presenti.
     3. Aggiunge eventuali valori "extra" di TextChoiceLabel non presenti
-       nelle TextChoices canoniche (utili in futuro per nuovi tipi).
+       nelle TextChoices canoniche.
     Risultato ordinato per `ordine` di TextChoiceLabel (default 0), poi
     per label asc.
     """
@@ -55,32 +67,29 @@ def _build_cache(field: str) -> list[tuple[str, str]]:
 
     tc = _get_textchoices(field)
     base = list(tc.choices) if tc else []  # [(codice, default_label), ...]
-    by_codice = {c: lbl for c, lbl in base}
 
     overrides = (
         TextChoiceLabel.objects.filter(field=field)
         .order_by("ordine", "label")
-        .values_list("codice", "label", "ordine")
+        .values_list("codice", "label", "label_micro", "ordine")
     )
-    ordered: list[tuple[str, str, int]] = []
+    ordered: list[tuple[str, str, str, int]] = []
     seen: set[str] = set()
-    for codice, label, ordine in overrides:
-        by_codice[codice] = label  # override del default
-        ordered.append((codice, label, ordine))
+    for codice, label, label_micro, ordine in overrides:
+        ordered.append((codice, label, label_micro, ordine))
         seen.add(codice)
 
     # Codici canonici non ancora visti (nessun override): in coda con ordine 999
     for codice, default_label in base:
         if codice in seen:
             continue
-        ordered.append((codice, default_label, 999))
+        ordered.append((codice, default_label, "", 999))
 
-    # Sort finale per (ordine, label) e ritorna solo (codice, label)
-    ordered.sort(key=lambda r: (r[2], r[1]))
-    return [(c, l) for c, l, _ in ordered]
+    ordered.sort(key=lambda r: (r[3], r[1]))
+    return [(c, l, m) for c, l, m, _ in ordered]
 
 
-def _cached(field: str) -> list[tuple[str, str]]:
+def _cached(field: str) -> list[tuple[str, str, str]]:
     with _cache_lock:
         if field not in _cache:
             _cache[field] = _build_cache(field)
@@ -90,18 +99,33 @@ def _cached(field: str) -> list[tuple[str, str]]:
 def get_label(field: str, codice: str | None) -> str:
     if not codice:
         return ""
-    for c, lbl in _cached(field):
+    for c, lbl, _ in _cached(field):
         if c == codice:
             return lbl
     return codice  # fallback: codice raw se non riconosciuto
 
 
+def get_micro_label(field: str, codice: str | None) -> str:
+    """Sigla 3 char per `codice`. Fallback su prime 3 lettere di `label`."""
+    if not codice:
+        return ""
+    for c, lbl, micro in _cached(field):
+        if c == codice:
+            return micro or _micro_fallback(lbl)
+    return codice[:3].upper()
+
+
 def get_choices(field: str) -> list[tuple[str, str]]:
-    return list(_cached(field))
+    return [(c, l) for c, l, _ in _cached(field)]
+
+
+def get_choices_micro(field: str) -> list[tuple[str, str]]:
+    """Come `get_choices` ma con la sigla micro al posto della label estesa."""
+    return [(c, m or _micro_fallback(l)) for c, l, m in _cached(field)]
 
 
 def get_values(field: str) -> list[str]:
-    return [c for c, _ in _cached(field)]
+    return [c for c, _, _ in _cached(field)]
 
 
 def invalidate_cache(field: str | None = None) -> None:

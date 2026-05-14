@@ -10,7 +10,8 @@ Parametri: `c` (Anagrafica), `field` (nome campo della whitelist).
     hx-swap="outerHTML"
     title="Clic per modificare">
   {% if field == "tipo_soggetto" %}
-    <span class="inline-flex rounded bg-slate-100 px-1.5 text-[11px] font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-300">{{ c.tipo_soggetto }}</span>
+    <span class="inline-flex rounded bg-slate-100 px-1.5 text-[11px] font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+          title="{{ c.get_tipo_soggetto_display }}">{{ c.tipo_soggetto|micro_label:"tipo_soggetto" }}</span>
   {% elif field == "stato" %}
     {% if c.stato == 'attivo' %}<span class="sh-state sh-state-done">Attivo</span>
     {% elif c.stato == 'sospeso' %}<span class="sh-state sh-state-wip">Sospeso</span>
