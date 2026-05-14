@@ -37,10 +37,11 @@ class RegolaApplicabilitaInline(admin.TabularInline):
 class StatoAdempimentoTipoInline(admin.TabularInline):
     """Stati specifici del tipo adempimento.
 
-    Le righe `e_predefinito=True` sono state copiate dallo Standard alla
-    creazione del tipo: modificabili (label/sigla/colore/livello), NON
-    eliminabili. Le righe aggiunte manualmente (e_predefinito=False) sono
-    eliminabili come al solito.
+    Sia le righe `e_predefinito=True` (copiate dallo Standard) che quelle
+    custom sono modificabili ed eliminabili. La cancellazione di uno stato
+    in uso da adempimenti viene bloccata da `StatoAdempimentoTipo.delete()`
+    con un errore esplicito: per riassegnare prima gli adempimenti, usare
+    la UI Configurazione → tab Stati (che offre un picker di rimpiazzo).
     """
     model = StatoAdempimentoTipo
     extra = 0
@@ -51,13 +52,6 @@ class StatoAdempimentoTipoInline(admin.TabularInline):
     )
     readonly_fields = ("e_predefinito",)
     ordering = ("livello", "denominazione")
-
-    def has_delete_permission(self, request, obj=None):
-        # Blocca la cancellazione degli stati predefiniti dall'inline.
-        # Quelli custom (`e_predefinito=False`) restano cancellabili tramite
-        # il flag `attivo` o eliminazione esplicita su ModelAdmin dedicato
-        # se necessario.
-        return False
 
 
 @admin.register(TipoAdempimentoCatalogo)

@@ -166,8 +166,10 @@ class ChecklistStep(models.Model):
 # piu' rispetto a F24); il set parte da uno "Standard" globale (editabile
 # da admin Django) che viene copiato sul tipo alla creazione, e poi e'
 # customizzabile per-tipo. Gli stati copiati dallo Standard sono marcati
-# `e_predefinito=True` e non eliminabili (UI nega la cancellazione);
-# l'utente puo' aggiungere stati custom (eliminabili).
+# `e_predefinito=True` (etichetta informativa); sia i predefiniti che i
+# custom sono modificabili ed eliminabili. Quando un'eliminazione tocca
+# uno stato in uso, l'UI richiede di scegliere uno stato di rimpiazzo
+# (vedi `adempimenti.config_views.stato_delete`).
 #
 # 3 attributi chiave per ogni stato:
 #  - `lavorabile`: conta nel residuo "da fare"? (es. da_fare=True, inviato=False)
@@ -267,9 +269,13 @@ class StatoAdempimentoTipo(StatoAdempimentoBase):
     set per quel tipo.
 
     Voci con `e_predefinito=True` sono state copiate dallo Standard alla
-    creazione del tipo e non sono cancellabili (UI/admin negano la
-    cancellazione). L'utente puo' modificarne label/sigla/colore/livello.
-    Voci con `e_predefinito=False` sono custom per il tipo e cancellabili.
+    creazione del tipo; voci con `e_predefinito=False` sono custom per il
+    tipo. Entrambe sono modificabili ed eliminabili: l'eliminazione di
+    uno stato in uso da adempimenti richiede di indicare uno stato di
+    rimpiazzo (gestito da `config_views.stato_delete`). La `delete()`
+    qui sotto e' una rete di sicurezza per l'admin Django, che non ha
+    UI di rimpiazzo: blocca la cancellazione se ci sono adempimenti che
+    referenziano ancora il codice.
     """
     tipo_adempimento = models.ForeignKey(
         TipoAdempimentoCatalogo,
@@ -278,7 +284,7 @@ class StatoAdempimentoTipo(StatoAdempimentoBase):
     )
     e_predefinito = models.BooleanField(
         default=False,
-        help_text="Copiato dallo Standard. Non eliminabile (modifiche sono ammesse).",
+        help_text="Copiato dallo Standard (etichetta informativa). Modificabile ed eliminabile.",
     )
 
     class Meta(StatoAdempimentoBase.Meta):
@@ -290,6 +296,18 @@ class StatoAdempimentoTipo(StatoAdempimentoBase):
                 name="uniq_statotipo_tipo_codice",
             ),
         ]
+
+    def delete(self, *args, **kwargs):
+        from django.db.models.deletion import ProtectedError
+        qs = self.tipo_adempimento.adempimenti.filter(stato=self.codice)
+        if qs.exists():
+            raise ProtectedError(
+                f"Stato '{self.denominazione}' usato da {qs.count()} adempimenti "
+                f"del tipo '{self.tipo_adempimento.denominazione}'. Riassegnali "
+                "a un altro stato (UI Configurazione → tab Stati) prima di eliminarlo.",
+                set(qs),
+            )
+        return super().delete(*args, **kwargs)
 
 
 # ---------------------------------------------------------------------------

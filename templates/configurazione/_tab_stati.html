@@ -1,14 +1,17 @@
 {% load adempimenti_extras %}
+<style>[x-cloak] { display: none !important; }</style>
 <div class="grid grid-cols-1 gap-4 lg:grid-cols-5">
     <div class="lg:col-span-3">
         <p class="mb-2 text-[11px] text-slate-500">
             Stati di avanzamento per gli adempimenti di questo tipo. Gli stati
-            marcati <strong>predef.</strong> arrivano dal set Standard e non sono
-            eliminabili (modificabili sì). Per nasconderli senza perdere lo
-            storico, disattivali col toggle. Per aggiungere stati custom usa il
-            modulo a destra. <em>Lavorabile</em> = lo stato conta nel
-            &quot;lavoro residuo&quot;. <em>Livello</em> = 0&hellip;100, progressione visiva
-            (anche sort).
+            marcati <strong>predef.</strong> arrivano dal set Standard, ma sono
+            comunque modificabili ed eliminabili. Per nasconderli senza
+            perdere lo storico, disattivali col toggle. Se lo stato è in uso
+            da adempimenti, l'eliminazione richiede di scegliere uno stato
+            di rimpiazzo (attivo) verso cui riassegnarli. Per aggiungere
+            stati custom usa il modulo a destra. <em>Lavorabile</em> = lo
+            stato conta nel &quot;lavoro residuo&quot;. <em>Livello</em> =
+            0&hellip;100, progressione visiva (anche sort).
         </p>
         <div class="overflow-auto rounded-md border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
             <table class="sh-table w-full">
@@ -52,14 +55,34 @@
                             </form>
                         </td>
                         <td class="px-3 py-2 text-right">
-                            {% if not s.e_predefinito %}
+                            {% if s.in_uso_count > 0 %}
                             <form method="post" action="{% url 'configurazione:stato_delete' tipo.pk s.pk %}"
-                                  onsubmit="return confirm('Eliminare lo stato &quot;{{ s.denominazione|escapejs }}&quot;? L\'operazione fallisce se ci sono adempimenti che lo usano.');" class="inline">
+                                  x-data="{open: false}" class="inline-block text-right">
+                                {% csrf_token %}
+                                <button type="button" @click="open = !open"
+                                        class="text-xs text-red-600 hover:underline whitespace-nowrap"
+                                        title="In uso da {{ s.in_uso_count }} adempimenti: richiede stato di rimpiazzo">
+                                    Elimina ({{ s.in_uso_count }})
+                                </button>
+                                <div x-show="open" x-cloak class="mt-1 flex flex-col items-end gap-1">
+                                    <select name="nuovo_stato_codice" required
+                                            class="text-xs border border-slate-300 rounded px-1 py-0.5 bg-white dark:bg-slate-800 dark:border-slate-700">
+                                        <option value="">— scegli rimpiazzo —</option>
+                                        {% for alt in stati_attivi %}{% if alt.pk != s.pk %}
+                                        <option value="{{ alt.codice }}">{{ alt.denominazione }}</option>
+                                        {% endif %}{% endfor %}
+                                    </select>
+                                    <button type="submit"
+                                            onclick="return confirm('Riassegnare {{ s.in_uso_count }} adempimenti e eliminare &quot;{{ s.denominazione|escapejs }}&quot;?');"
+                                            class="text-xs text-red-600 hover:underline">Conferma</button>
+                                </div>
+                            </form>
+                            {% else %}
+                            <form method="post" action="{% url 'configurazione:stato_delete' tipo.pk s.pk %}"
+                                  onsubmit="return confirm('Eliminare lo stato &quot;{{ s.denominazione|escapejs }}&quot;?');" class="inline">
                                 {% csrf_token %}
                                 <button type="submit" class="text-xs text-red-600 hover:underline">Elimina</button>
                             </form>
-                            {% else %}
-                            <span class="text-[11px] text-slate-400" title="Gli stati predefiniti non sono eliminabili. Usa il toggle 'attivo' per nasconderli dai dropdown.">—</span>
                             {% endif %}
                         </td>
                     </tr>
