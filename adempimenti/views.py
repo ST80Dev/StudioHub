@@ -239,15 +239,15 @@ def lista_lipe(request):
         qs = qs.filter(anagrafica__codice_multi__icontains=f_multi)
 
     f_contab = request.GET.get("f_contab") or ""
-    if f_contab in GestioneContabilita.values:
+    if f_contab in _choices_labels.get_values("contabilita", include_inactive=True):
         qs = qs.filter(anagrafica__contabilita=f_contab)
 
     f_regime = request.GET.get("f_regime") or ""
-    if f_regime in RegimeContabile.values:
+    if f_regime in _choices_labels.get_values("regime_contabile", include_inactive=True):
         qs = qs.filter(anagrafica__regime_contabile=f_regime)
 
     f_iva = request.GET.get("f_iva") or ""
-    if f_iva in PeriodicitaIVA.values:
+    if f_iva in _choices_labels.get_values("periodicita_iva", include_inactive=True):
         qs = qs.filter(anagrafica__periodicita_iva=f_iva)
 
     f_stato = request.GET.get("f_stato") or ""
@@ -375,13 +375,13 @@ def _render_lipe_anno(request, tipo, anno):
     if f_codice:
         qs = qs.filter(anagrafica__codice_interno__icontains=f_codice)
     f_contab = request.GET.get("f_contab") or ""
-    if f_contab in GestioneContabilita.values:
+    if f_contab in _choices_labels.get_values("contabilita", include_inactive=True):
         qs = qs.filter(anagrafica__contabilita=f_contab)
     f_regime = request.GET.get("f_regime") or ""
-    if f_regime in RegimeContabile.values:
+    if f_regime in _choices_labels.get_values("regime_contabile", include_inactive=True):
         qs = qs.filter(anagrafica__regime_contabile=f_regime)
     f_iva = request.GET.get("f_iva") or ""
-    if f_iva in PeriodicitaIVA.values:
+    if f_iva in _choices_labels.get_values("periodicita_iva", include_inactive=True):
         qs = qs.filter(anagrafica__periodicita_iva=f_iva)
 
     # Aggrega per anagrafica: { anagrafica_id: {"anag": <Anagrafica>,

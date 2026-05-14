@@ -17,7 +17,7 @@ Parametri: `c`, `field`, `meta` (widget, choices).
       <select name="value" autofocus
               class="w-full rounded border-amber-300 text-xs px-1.5 py-0.5 dark:bg-slate-800 dark:border-amber-700">
         <option value="" {% if not c|get_attr:field %}selected{% endif %}>—</option>
-        {% for val, lbl in meta.choices.choices %}
+        {% for val, lbl in meta.choices %}
           <option value="{{ val }}" {% if c|get_attr:field|stringformat:"s" == val %}selected{% endif %}>{{ lbl }}</option>
         {% endfor %}
       </select>
