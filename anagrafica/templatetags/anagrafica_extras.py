@@ -27,3 +27,19 @@ def get_attr(obj, name: str):
         return getattr(obj, name, "")
     except Exception:
         return ""
+
+
+@register.filter
+def referente_principale_attivo(cliente, ruolo: str):
+    """Wrapper template per `Anagrafica.referente_principale_attivo(ruolo)`.
+
+    Usato dalle celle della lista per ottenere il referente da mostrare.
+    Esegue una query per riga (N+1 sulla pagina paginata: accettabile a
+    50 record/pagina; ottimizzabile in futuro con prefetch).
+    """
+    if cliente is None:
+        return None
+    try:
+        return cliente.referente_principale_attivo(ruolo)
+    except Exception:
+        return None

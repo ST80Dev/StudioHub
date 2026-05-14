@@ -1,0 +1,51 @@
+{% comment %}
+Cella in modalità edit per referente. Form con select utente + date di
+passaggio. L'utente conferma la data (può essere retroattiva) prima del
+salvataggio. Submit → storicizza (chiude la riga attiva e ne apre una
+nuova).
+Parametri: `c`, `ruolo`, `referente` (corrente attivo o None), `utenti`,
+           `oggi` (ISO date string).
+{% endcomment %}
+<td class="px-2 py-1 bg-amber-50 dark:bg-amber-950/30 align-top">
+  <form hx-post="{% url 'anagrafica:referente_save' c.pk ruolo %}"
+        hx-target="closest td"
+        hx-swap="outerHTML"
+        class="flex flex-col gap-1">
+    {% csrf_token %}
+    <select name="utente_id"
+            class="w-full rounded border-slate-300 px-1 py-0.5 text-xs dark:bg-slate-800 dark:border-slate-700">
+      <option value="">— nessuno —</option>
+      {% for u in utenti %}
+        <option value="{{ u.pk }}" {% if referente and referente.utente_id == u.pk %}selected{% endif %}>{{ u.etichetta_lista }}</option>
+      {% endfor %}
+    </select>
+    <label class="flex items-center gap-1 text-[10px] text-slate-600 dark:text-slate-300">
+      <span>dal</span>
+      <input type="date" name="data" value="{{ oggi }}" required
+             class="rounded border-slate-300 px-1 py-0.5 text-xs dark:bg-slate-800 dark:border-slate-700">
+    </label>
+    <div class="flex gap-1">
+      <button type="submit"
+              class="rounded bg-amber-600 px-2 py-0.5 text-[11px] text-white hover:bg-amber-700">
+        Storicizza
+      </button>
+      <button type="button"
+              hx-get="{% url 'anagrafica:referente_cell' c.pk ruolo %}"
+              hx-target="closest td"
+              hx-swap="outerHTML"
+              class="rounded border border-slate-300 px-2 py-0.5 text-[11px] hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800">
+        Annulla
+      </button>
+    </div>
+    {% if referente %}
+      <p class="text-[10px] text-slate-500 leading-tight">
+        Attuale: <strong>{{ referente.utente.etichetta_lista }}</strong> dal {{ referente.data_inizio|date:"d/m/Y" }}.
+        Verrà chiuso al giorno prima della data scelta.
+      </p>
+    {% else %}
+      <p class="text-[10px] text-slate-500 leading-tight">
+        Nessun referente attivo. Apertura nuova carica dalla data scelta.
+      </p>
+    {% endif %}
+  </form>
+</td>

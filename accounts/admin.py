@@ -18,10 +18,12 @@ class UtenteStudioAdmin(UserAdmin):
         "username",
         "last_name",
         "first_name",
+        "etichetta_ui",
         "email",
         "is_active",
         "is_staff",
     )
+    list_editable = ("etichetta_ui",)
     filter_horizontal = ("aree", "groups", "user_permissions")
     fieldsets = UserAdmin.fieldsets + (
         (
@@ -29,6 +31,7 @@ class UtenteStudioAdmin(UserAdmin):
             {
                 "fields": (
                     "telefono",
+                    "etichetta_ui",
                     "aree",
                     "tema",
                     "densita_ui",

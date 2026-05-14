@@ -228,6 +228,20 @@ class Anagrafica(models.Model):
     def is_entita(self) -> bool:
         return self.tipo_soggetto in TIPI_ENTITA
 
+    def referente_principale_attivo(self, ruolo: str):
+        """Referente attualmente in carica per il ruolo dato.
+
+        Ordina per `principale` desc (capo-pratica prima), poi data_inizio
+        desc. Restituisce `None` se nessuno è in carica.
+        """
+        return (
+            self.referenti_studio
+            .filter(ruolo=ruolo, data_fine__isnull=True)
+            .select_related("utente")
+            .order_by("-principale", "-data_inizio")
+            .first()
+        )
+
 
 class RuoloReferenteStudio(models.TextChoices):
     ADDETTO_CONTABILITA = "addetto_contabilita", "Addetto contabilità"

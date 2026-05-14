@@ -1,0 +1,20 @@
+{% comment %}
+Cella display per referente principale attivo (Addetto contab. / Resp. consulenza).
+Click → entra in modalità edit (HTMX). Lo swap è outerHTML quindi il
+target è la cella stessa.
+Parametri: `c` (Anagrafica), `ruolo` (valore di RuoloReferenteStudio),
+           `referente` (AnagraficaReferenteStudio o None).
+{% endcomment %}
+<td class="px-3 group cursor-pointer hover:bg-amber-50 dark:hover:bg-amber-950/30"
+    hx-get="{% url 'anagrafica:referente_edit_form' c.pk ruolo %}"
+    hx-trigger="click"
+    hx-target="this"
+    hx-swap="outerHTML"
+    title="Clic per modificare (con conferma data)">
+  {% if referente %}
+    <span class="text-xs">{{ referente.utente.etichetta_lista }}</span>
+  {% else %}
+    <span class="text-xs text-slate-400">—</span>
+  {% endif %}
+  <span aria-hidden="true" class="ml-1 opacity-0 group-hover:opacity-60 text-[10px]">✎</span>
+</td>

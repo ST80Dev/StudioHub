@@ -1,7 +1,11 @@
+from datetime import date, timedelta
+
 from django.contrib import messages
+from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.core.paginator import Paginator
-from django.db.models import Count, Q
+from django.db import transaction
+from django.db.models import Count, Exists, OuterRef, Q, Subquery
 from django.http import HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -12,13 +16,42 @@ from django.utils.text import slugify
 from .forms import AnagraficaForm
 from .models import (
     Anagrafica,
+    AnagraficaReferenteStudio,
     Categoria,
     GestioneContabilita,
     PeriodicitaIVA,
     RegimeContabile,
+    RuoloReferenteStudio,
     StatoAnagrafica,
     TipoSoggetto,
 )
+
+
+def _utenti_studio_qs():
+    """Utenti dello studio selezionabili come referenti.
+
+    Tutti gli attivi non-demo, ordinati per cognome/nome. Usata dal filtro
+    di colonna e dal select inline edit (vedi `referente_edit_form`).
+    """
+    User = get_user_model()
+    return User.objects.filter(is_active=True, is_demo=False).order_by(
+        "last_name", "first_name", "username"
+    )
+
+
+# Subquery: principale referente attivo per ruolo. Restituisce username
+# (ordinato per `principale` desc + data_inizio desc), usato per ordinamento
+# server-side della colonna.
+def _subq_referente_username(ruolo: str):
+    return Subquery(
+        AnagraficaReferenteStudio.objects.filter(
+            anagrafica=OuterRef("pk"),
+            ruolo=ruolo,
+            data_fine__isnull=True,
+        )
+        .order_by("-principale", "-data_inizio")
+        .values("utente__username")[:1]
+    )
 
 
 @login_required
@@ -77,6 +110,43 @@ def lista_clienti(request):
     if f_contab in GestioneContabilita.values:
         queryset = queryset.filter(contabilita=f_contab)
 
+    # Filtri referenti: utente_id che deve essere addetto/responsabile attivo.
+    # Exists subquery per evitare duplicati su clienti con più referenti.
+    f_addetto = request.GET.get("f_addetto", "")
+    if f_addetto.isdigit():
+        queryset = queryset.filter(
+            Exists(
+                AnagraficaReferenteStudio.objects.filter(
+                    anagrafica=OuterRef("pk"),
+                    ruolo=RuoloReferenteStudio.ADDETTO_CONTABILITA,
+                    utente_id=int(f_addetto),
+                    data_fine__isnull=True,
+                )
+            )
+        )
+    f_consulente = request.GET.get("f_consulente", "")
+    if f_consulente.isdigit():
+        queryset = queryset.filter(
+            Exists(
+                AnagraficaReferenteStudio.objects.filter(
+                    anagrafica=OuterRef("pk"),
+                    ruolo=RuoloReferenteStudio.RESPONSABILE_CONSULENZA,
+                    utente_id=int(f_consulente),
+                    data_fine__isnull=True,
+                )
+            )
+        )
+
+    # Annotazioni per ordinamento: username del principale attivo per ruolo.
+    queryset = queryset.annotate(
+        addetto_username=_subq_referente_username(
+            RuoloReferenteStudio.ADDETTO_CONTABILITA
+        ),
+        consulente_username=_subq_referente_username(
+            RuoloReferenteStudio.RESPONSABILE_CONSULENZA
+        ),
+    )
+
     # Filtro "Da completare": anagrafiche con denominazione o tipo_soggetto
     # vuoti (tipicamente create da import permissivo). Utile per identificare
     # in fretta cosa va sistemato.
@@ -97,6 +167,7 @@ def lista_clienti(request):
         "codice_interno", "denominazione", "tipo_soggetto",
         "codice_fiscale", "partita_iva", "regime_contabile",
         "periodicita_iva", "contabilita", "stato",
+        "addetto_username", "consulente_username",
     }
     sort = request.GET.get("sort", "denominazione")
     sort_field = sort.lstrip("-")
@@ -122,6 +193,8 @@ def lista_clienti(request):
         "f_regime": f_regime,
         "f_iva": f_iva,
         "f_contab": f_contab,
+        "f_addetto": f_addetto,
+        "f_consulente": f_consulente,
         "f_incompleto": f_incompleto,
         "n_incomplete": n_incomplete,
         # back-compat (sidebar/altri callers che ancora usano i nomi vecchi)
@@ -133,6 +206,7 @@ def lista_clienti(request):
         "regimi": RegimeContabile.choices,
         "periodicita": PeriodicitaIVA.choices,
         "contabilita_choices": GestioneContabilita.choices,
+        "utenti_studio": _utenti_studio_qs(),
         "totale": paginator.count,
         # sort corrente per indicatori UI
         "sort": sort,
@@ -520,3 +594,149 @@ def diagnostica_remap(request):
         f"Rimappati {updated} record: {field} '{from_value or '(vuoto)'}' → '{to_value}'.",
     )
     return redirect("anagrafica:diagnostica")
+
+
+# ---------------------------------------------------------------------------
+# Inline edit referenti studio (Addetto contabilità / Responsabile consulenza)
+# ---------------------------------------------------------------------------
+#
+# Pattern HTMX simile all'inline edit cella-per-cella, ma diverso nel
+# salvataggio: il referente è un record storicizzato, quindi cambiare
+# referente significa CHIUDERE le righe attive (data_fine impostata) e
+# APRIRE una nuova riga (data_inizio = data scelta). L'utente conferma
+# esplicitamente la data, che può essere anche retroattiva.
+#
+# Modello mentale:
+# - vecchia riga: data_fine = data_passaggio - 1 giorno (ultimo giorno effettivo)
+# - nuova riga:   data_inizio = data_passaggio, principale=True
+# Se "nessuno": chiudo le righe attive con data_fine = data_passaggio e
+# non apro nulla.
+
+
+def _ruolo_valido(ruolo: str) -> bool:
+    return ruolo in RuoloReferenteStudio.values
+
+
+def _render_referente_cell(request, cliente: Anagrafica, ruolo: str):
+    """Render della cella display per il referente principale attivo."""
+    referente = cliente.referente_principale_attivo(ruolo)
+    return render(
+        request,
+        "anagrafica/_referente_cell_display.html",
+        {"c": cliente, "ruolo": ruolo, "referente": referente},
+    )
+
+
+@login_required
+def referente_cell(request, pk: int, ruolo: str):
+    """GET: ritorna la cella display (usata per 'Annulla' dall'edit form)."""
+    if not _ruolo_valido(ruolo):
+        return HttpResponseBadRequest("Ruolo non valido.")
+    cliente = get_object_or_404(Anagrafica, pk=pk, is_deleted=False)
+    return _render_referente_cell(request, cliente, ruolo)
+
+
+@login_required
+def referente_edit_form(request, pk: int, ruolo: str):
+    """GET: ritorna il <td> in modalità edit per il referente sul ruolo dato.
+
+    Mostra:
+    - select utenti studio attivi (più "— nessuno —")
+    - input date "data di passaggio" preimpostato a oggi (anche retroattiva)
+    - bottoni Salva / Annulla
+    """
+    if not _ruolo_valido(ruolo):
+        return HttpResponseBadRequest("Ruolo non valido.")
+    cliente = get_object_or_404(Anagrafica, pk=pk, is_deleted=False)
+    referente = cliente.referente_principale_attivo(ruolo)
+    return render(
+        request,
+        "anagrafica/_referente_cell_edit.html",
+        {
+            "c": cliente,
+            "ruolo": ruolo,
+            "referente": referente,
+            "utenti": _utenti_studio_qs(),
+            "oggi": date.today().isoformat(),
+        },
+    )
+
+
+@login_required
+@require_POST
+def referente_save(request, pk: int, ruolo: str):
+    """POST: storicizza il referente sul ruolo dato.
+
+    POST:
+    - utente_id: pk dell'utente nuovo, oppure "" per "nessuno"
+    - data: data di passaggio (YYYY-MM-DD)
+    """
+    if not _ruolo_valido(ruolo):
+        return HttpResponseBadRequest("Ruolo non valido.")
+    cliente = get_object_or_404(Anagrafica, pk=pk, is_deleted=False)
+
+    utente_id_raw = (request.POST.get("utente_id") or "").strip()
+    data_raw = (request.POST.get("data") or "").strip()
+
+    try:
+        data_passaggio = date.fromisoformat(data_raw)
+    except ValueError:
+        return HttpResponseBadRequest("Data non valida.")
+
+    User = get_user_model()
+    nuovo_utente = None
+    if utente_id_raw:
+        if not utente_id_raw.isdigit():
+            return HttpResponseBadRequest("Utente non valido.")
+        nuovo_utente = User.objects.filter(
+            pk=int(utente_id_raw), is_active=True, is_demo=False
+        ).first()
+        if not nuovo_utente:
+            return HttpResponseBadRequest("Utente non trovato.")
+
+    attivi = list(
+        cliente.referenti_studio.filter(ruolo=ruolo, data_fine__isnull=True)
+    )
+
+    # Vincolo modello: data_fine >= data_inizio. Con data retroattiva
+    # potremmo chiudere una riga attiva a una data precedente al suo
+    # data_inizio: rifiutiamo con messaggio chiaro.
+    if nuovo_utente:
+        data_fine_proposta = data_passaggio - timedelta(days=1)
+    else:
+        data_fine_proposta = data_passaggio
+    for r in attivi:
+        if data_fine_proposta < r.data_inizio:
+            return HttpResponseBadRequest(
+                f"Data retroattiva non valida: la carica attuale è iniziata il "
+                f"{r.data_inizio:%d/%m/%Y}. Correggere prima via admin."
+            )
+
+    # No-op: nessuna modifica reale.
+    if (
+        nuovo_utente
+        and len(attivi) == 1
+        and attivi[0].utente_id == nuovo_utente.pk
+    ):
+        return _render_referente_cell(request, cliente, ruolo)
+    if not nuovo_utente and not attivi:
+        return _render_referente_cell(request, cliente, ruolo)
+
+    with transaction.atomic():
+        # Chiude tutte le righe attive: ultimo giorno effettivo = data - 1
+        # se apriremo una nuova riga in data X; se invece resta "nessuno",
+        # la chiusura coincide con la data scelta.
+        for r in attivi:
+            r.data_fine = data_fine_proposta
+            r.save(update_fields=["data_fine"])
+
+        if nuovo_utente:
+            AnagraficaReferenteStudio.objects.create(
+                anagrafica=cliente,
+                utente=nuovo_utente,
+                ruolo=ruolo,
+                principale=True,
+                data_inizio=data_passaggio,
+            )
+
+    return _render_referente_cell(request, cliente, ruolo)

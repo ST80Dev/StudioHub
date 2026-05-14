@@ -21,6 +21,8 @@
     {% include "anagrafica/_cell_display.html" with c=c field="regime_contabile" %}
     {% include "anagrafica/_cell_display.html" with c=c field="periodicita_iva" %}
     {% include "anagrafica/_cell_display.html" with c=c field="contabilita" %}
+    {% include "anagrafica/_referente_cell_display.html" with c=c ruolo="addetto_contabilita" referente=c|referente_principale_attivo:"addetto_contabilita" %}
+    {% include "anagrafica/_referente_cell_display.html" with c=c ruolo="responsabile_consulenza" referente=c|referente_principale_attivo:"responsabile_consulenza" %}
     {% include "anagrafica/_cell_display.html" with c=c field="stato" %}
     <td class="px-3 text-right">
         <a href="{% url 'anagrafica:edit' c.pk %}"
@@ -28,5 +30,5 @@
     </td>
 </tr>
 {% empty %}
-<tr><td colspan="11" class="px-3 py-8 text-center text-sm text-slate-500">Nessun cliente trovato.</td></tr>
+<tr><td colspan="13" class="px-3 py-8 text-center text-sm text-slate-500">Nessun cliente trovato.</td></tr>
 {% endfor %}

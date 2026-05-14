@@ -59,6 +59,17 @@ class UtenteStudio(AbstractUser):
         help_text="True per utenti creati dal seed di test. Mai True per utenti reali.",
     )
 
+    # Etichetta usata nelle liste/elenchi UI dove il "Cognome Nome" può
+    # creare omonimi. Default suggerito: "nome.c" (es. "mario.r" per Mario
+    # Rossi). Modificabile a piacimento dagli admin via Django admin.
+    etichetta_ui = models.CharField(
+        max_length=40,
+        blank=True,
+        help_text="Etichetta breve usata nelle liste (es. 'mario.r'). "
+        "Se vuoto, viene generata automaticamente da nome+cognome o "
+        "in fallback dallo username.",
+    )
+
     class Meta:
         ordering = ("last_name", "first_name", "username")
         verbose_name = "Utente studio"
@@ -67,3 +78,22 @@ class UtenteStudio(AbstractUser):
     def __str__(self) -> str:
         full = self.get_full_name()
         return full or self.username
+
+    @property
+    def etichetta_lista(self) -> str:
+        """Etichetta breve da mostrare in tabelle/elenchi.
+
+        Priorità: `etichetta_ui` se impostata; altrimenti `nome.c` (nome
+        minuscolo + iniziale cognome); in ultimo fallback lo username.
+        """
+        if self.etichetta_ui:
+            return self.etichetta_ui
+        nome = (self.first_name or "").strip()
+        cognome = (self.last_name or "").strip()
+        if nome and cognome:
+            return f"{nome.lower()}.{cognome[0].lower()}"
+        if nome:
+            return nome.lower()
+        if cognome:
+            return cognome.lower()
+        return self.username
