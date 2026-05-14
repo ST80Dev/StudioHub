@@ -29,9 +29,11 @@ from django.utils import timezone
 
 from anagrafica.models import (
     Anagrafica,
+    AnagraficaReferenteStudio,
     GestioneContabilita,
     PeriodicitaIVA,
     RegimeContabile,
+    RuoloReferenteStudio,
     StatoAnagrafica,
     TipoSoggetto,
 )
@@ -200,6 +202,10 @@ class ApplyStats:
     pending_lasciate: int = 0
     dati_importati: int = 0
     alias_creati: int = 0
+    # Referenti: assegnati = AnagraficaReferenteStudio creati (utente risolto);
+    # pending = nomi salvati come DatoImportato in attesa di risoluzione manuale.
+    referenti_assegnati: int = 0
+    referenti_pending: int = 0
     dettagli_errori: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
@@ -211,6 +217,8 @@ class ApplyStats:
             "pending_lasciate": self.pending_lasciate,
             "dati_importati": self.dati_importati,
             "alias_creati": self.alias_creati,
+            "referenti_assegnati": self.referenti_assegnati,
+            "referenti_pending": self.referenti_pending,
             "dettagli_errori": self.dettagli_errori[:50],
         }
 
@@ -234,6 +242,65 @@ _NUMERIC_PLACEHOLDERS = frozenset({"0", "00", "000", "0000", "00000",
                                     "000000", "0000000", "00000000",
                                     "000000000", "0000000000",
                                     "00000000000"})
+
+
+# ---------------------------------------------------------------------------
+# Referenti studio (target speciali del mapping)
+# ---------------------------------------------------------------------------
+#
+# Target mappabili dal wizard: il valore della cella e' un nome/sigla che
+# proviamo a risolvere contro `UtenteStudio`. Se riusciamo, creiamo
+# direttamente la riga `AnagraficaReferenteStudio`. Altrimenti salviamo
+# il valore originale come `DatoImportato(chiave=<target>_pending)`,
+# recuperabile col management command `risolvi_referenti_pending` quando
+# gli utenti saranno popolati.
+
+_REFERENTE_TARGETS: dict[str, str] = {
+    "referente_contabilita": RuoloReferenteStudio.REFERENTE_CONTABILITA,
+    "referente_consulenza": RuoloReferenteStudio.REFERENTE_CONSULENZA,
+}
+
+
+def _match_utente(raw_name: str):
+    """Prova a risolvere un nome (free-text dall'Excel) a un UtenteStudio.
+
+    Strategia: confronto case-insensitive su `get_full_name()`, `username`,
+    `last_name` da solo. Ritorna l'utente solo se UNA singola corrispondenza
+    e' trovata; in caso di 0 match o ambiguita' (>1), ritorna None per non
+    fare assegnazioni rischiose.
+    """
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+    s = (raw_name or "").strip()
+    if not s:
+        return None
+
+    # Match esatto su username
+    qs = User.objects.filter(is_active=True, username__iexact=s)
+    if qs.count() == 1:
+        return qs.first()
+
+    # Match esatto su "Nome Cognome" / "Cognome Nome"
+    parts = s.split()
+    if len(parts) >= 2:
+        first, last = parts[0], " ".join(parts[1:])
+        qs = User.objects.filter(
+            is_active=True, first_name__iexact=first, last_name__iexact=last,
+        )
+        if qs.count() == 1:
+            return qs.first()
+        qs = User.objects.filter(
+            is_active=True, first_name__iexact=last, last_name__iexact=first,
+        )
+        if qs.count() == 1:
+            return qs.first()
+
+    # Match esatto su solo cognome (utile per file che riportano "Rossi")
+    qs = User.objects.filter(is_active=True, last_name__iexact=s)
+    if qs.count() == 1:
+        return qs.first()
+
+    return None
 
 
 def _make_unique_codice_interno(base: str) -> str:
@@ -269,6 +336,7 @@ def _build_anagrafica_payload(
     """
     anagrafica_fields: dict = {}
     extra_kv: dict = {}
+    referenti_raw: dict = {}  # {target: raw_value} per i target _REFERENTE_TARGETS
     ces_derivati: dict = {}
 
     for col, target in mapping.items():
@@ -283,6 +351,11 @@ def _build_anagrafica_payload(
             extra_kv.setdefault(chiave, str(raw).strip())
             if chiave == "ces_acq" and not ces_derivati:
                 ces_derivati.update(_interpret_ces_acq(raw))
+            continue
+        # Target speciali "referente_*": non sono campi di Anagrafica,
+        # vengono gestiti dopo il save (vedi _apply_referenti).
+        if target in _REFERENTE_TARGETS:
+            referenti_raw.setdefault(target, str(raw).strip())
             continue
         val = _transform_value(target, raw)
         if val is None or val == "":
@@ -317,7 +390,50 @@ def _build_anagrafica_payload(
                 or f"R{riga.pk}"
             )
 
-    return anagrafica_fields, extra_kv, ces_derivati
+    return anagrafica_fields, extra_kv, ces_derivati, referenti_raw
+
+
+def _apply_referenti(
+    anagrafica: Anagrafica,
+    referenti_raw: dict,
+    sessione: ImportSession,
+    stats: ApplyStats,
+) -> None:
+    """Per ogni target referente:
+    - se il nome si risolve a un singolo UtenteStudio, upsert
+      AnagraficaReferenteStudio (idempotente: niente duplicati per
+      anagrafica/utente/ruolo se gia' attivo).
+    - altrimenti salva il nome come DatoImportato con chiave
+      `<target>_pending` (recuperabile con management command).
+    """
+    for target, raw_value in referenti_raw.items():
+        if not raw_value:
+            continue
+        ruolo = _REFERENTE_TARGETS[target]
+        utente = _match_utente(raw_value)
+        if utente is not None:
+            already = AnagraficaReferenteStudio.objects.filter(
+                anagrafica=anagrafica,
+                utente=utente,
+                ruolo=ruolo,
+                data_fine__isnull=True,
+            ).exists()
+            if not already:
+                AnagraficaReferenteStudio.objects.create(
+                    anagrafica=anagrafica,
+                    utente=utente,
+                    ruolo=ruolo,
+                    data_inizio=date.today(),
+                )
+                stats.referenti_assegnati += 1
+        else:
+            DatoImportato.objects.update_or_create(
+                anagrafica=anagrafica,
+                chiave=f"{target}_pending",
+                fonte_session=sessione,
+                defaults={"valore": raw_value},
+            )
+            stats.referenti_pending += 1
 
 
 def _apply_single_row(riga: ImportRow, sessione: ImportSession, stats: ApplyStats) -> None:
@@ -348,7 +464,9 @@ def _apply_single_row(riga: ImportRow, sessione: ImportSession, stats: ApplyStat
         stats.dettagli_errori.append(f"#{riga.numero_riga}: match mancante")
         return
 
-    payload, extra_kv, _ = _build_anagrafica_payload(riga, mapping, is_new=is_new)
+    payload, extra_kv, _, referenti_raw = _build_anagrafica_payload(
+        riga, mapping, is_new=is_new
+    )
 
     # `codice_cli` e' unique nullable: una stringa vuota o garbage va
     # convertita in None per evitare il conflitto con altre righe "vuote".
@@ -415,6 +533,11 @@ def _apply_single_row(riga: ImportRow, sessione: ImportSession, stats: ApplyStat
                     defaults={"valore": val},
                 )
                 stats.dati_importati += 1
+
+            # Referenti studio (target speciali): risolve nome -> UtenteStudio
+            # oppure salva come DatoImportato `_pending` per backfill manuale.
+            if referenti_raw:
+                _apply_referenti(anagrafica, referenti_raw, sessione, stats)
 
             # Warning di import: codici univoci in conflitto degradati a vuoto.
             # Memorizzati in DatoImportato per audit successivo. La constraint

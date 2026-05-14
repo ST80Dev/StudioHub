@@ -61,6 +61,19 @@ ANAGRAFICA_FIELDS_GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
             ("note", "Note"),
         ],
     ),
+    (
+        # Target speciali: durante l'apply provano a risolvere il nome
+        # contro UtenteStudio e creano una riga AnagraficaReferenteStudio
+        # (vedi importazione/apply.py). Se la risoluzione fallisce
+        # (utenti non ancora popolati, omonimie, ecc.) il valore viene
+        # salvato come DatoImportato con chiave `<target>_pending`,
+        # recuperabile con il management command `risolvi_referenti_pending`.
+        "Referenti studio",
+        [
+            ("referente_contabilita", "Referente contabilità (nome/sigla addetto)"),
+            ("referente_consulenza", "Referente consulenza (nome/sigla addetto)"),
+        ],
+    ),
 ]
 
 # Chiavi extra (DatoImportato) suggerite — usate per i campi non promossi
