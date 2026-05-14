@@ -216,13 +216,38 @@ class ApplyStats:
 
 
 # Campi obbligatori per la creazione di una nuova Anagrafica.
-# tipo_soggetto NON e' obbligatorio: l'utente puo' creare anagrafiche
-# senza tipo e completarlo dopo manualmente dalla lista.
-_REQUIRED_FOR_CREATE = ("denominazione", "codice_interno")
+# Tutti gli altri (denominazione, tipo_soggetto, ecc.) sono ammessi vuoti:
+# l'utente puo' importare velocemente quanti piu' record possibili e poi
+# completare i dati mancanti dalla lista clienti (filtro "Da completare"
+# + inline edit + bulk update).
+_REQUIRED_FOR_CREATE = ("codice_interno",)
 
-# Codici univoci o quasi-univoci su cui fare pre-check prima di create per
-# fornire un messaggio user-friendly invece di un IntegrityError grezzo.
+# Codici univoci su cui fare pre-check prima di create. In caso di conflitto
+# il valore in questione viene degradato a None sulla nuova anagrafica
+# e l'evento viene registrato come `DatoImportato(chiave='import_warning')`.
+# Cosi' l'import non si blocca per duplicati ma li traccia per l'audit.
 _UNIQUE_CODE_FIELDS = ("codice_cli", "codice_fiscale", "partita_iva")
+
+# Placeholder noti per P.IVA/CF: stringhe numeriche tipo "0", "00000000000"
+# che non sono partite IVA reali. Trattati come vuoti su quei due campi.
+_NUMERIC_PLACEHOLDERS = frozenset({"0", "00", "000", "0000", "00000",
+                                    "000000", "0000000", "00000000",
+                                    "000000000", "0000000000",
+                                    "00000000000"})
+
+
+def _make_unique_codice_interno(base: str) -> str:
+    """Restituisce un `codice_interno` libero a partire da `base`. Se `base`
+    e' gia' usato aggiunge un suffisso `-2`, `-3`, ... finche' libero."""
+    from anagrafica.models import Anagrafica as _A
+    if not base:
+        return base
+    if not _A.objects.filter(codice_interno=base).exists():
+        return base
+    n = 2
+    while _A.objects.filter(codice_interno=f"{base}-{n}").exists():
+        n += 1
+    return f"{base}-{n}"
 
 
 def _build_anagrafica_payload(
@@ -232,9 +257,15 @@ def _build_anagrafica_payload(
 ) -> tuple[dict, dict, dict]:
     """Restituisce (campi_anagrafica, extra_kv, ces_acq_derivati).
 
-    Applica anche i fallback dal contesto di sezione: tipo_soggetto,
-    regime_contabile, contabilita. Filtra i valori "spazzatura" tipici di
-    Excel (#N/A, #NUM!, -, ecc.) trattandoli come stringhe vuote.
+    Comportamento per mapping multipli (piu' colonne mappate sullo stesso
+    target, es. due colonne entrambe mappate a `denominazione`):
+    **vince il primo valore non spazzatura** trovato. Permette il fallback
+    naturale DENOMINAZIONE -> RAG.SOC: se la prima e' vuota, l'altra
+    viene usata automaticamente.
+
+    Filtra i valori "spazzatura" tipici di Excel (#N/A, #NUM!, -, ecc.).
+    Per i campi P.IVA/CF anche i placeholder numerici come "0" vengono
+    trattati come vuoti.
     """
     anagrafica_fields: dict = {}
     extra_kv: dict = {}
@@ -248,14 +279,20 @@ def _build_anagrafica_payload(
             continue
         if target.startswith("extra:"):
             chiave = target[len("extra:"):]
-            extra_kv[chiave] = str(raw).strip()
-            if chiave == "ces_acq":
+            # setdefault: vince il primo valore non vuoto per chiave
+            extra_kv.setdefault(chiave, str(raw).strip())
+            if chiave == "ces_acq" and not ces_derivati:
                 ces_derivati.update(_interpret_ces_acq(raw))
             continue
         val = _transform_value(target, raw)
         if val is None or val == "":
             continue
-        anagrafica_fields[target] = val
+        # Placeholder numerici per i campi codice fiscale / partita IVA.
+        if target in ("codice_fiscale", "partita_iva") and str(val).strip() in _NUMERIC_PLACEHOLDERS:
+            continue
+        # `setdefault`: primo non-vuoto wins (es. denominazione viene dalla
+        # prima colonna mappata che ha valore valido).
+        anagrafica_fields.setdefault(target, val)
 
     # Fallback dal contesto sezione: solo se NON mappato esplicitamente.
     ctx = riga.contesto_sezione or {}
@@ -268,19 +305,17 @@ def _build_anagrafica_payload(
     for f, v in ces_derivati.items():
         anagrafica_fields.setdefault(f, v)
 
-    # Default obbligatori per la creazione.
+    # Genera codice_interno se non presente: priorità a codice_cli, poi
+    # codice_multi, poi un placeholder R<id_riga>. Garantito unico via
+    # auto-suffix se necessario (gestito in _apply_single_row al momento
+    # del create).
     if is_new:
-        if not anagrafica_fields.get("denominazione"):
-            anagrafica_fields["denominazione"] = ""  # validato dopo
-        # Genera codice_interno se non presente: priorità a codice_cli, poi
-        # codice_multi, poi un placeholder C<id_riga>.
         if not anagrafica_fields.get("codice_interno"):
             anagrafica_fields["codice_interno"] = (
                 anagrafica_fields.get("codice_cli")
                 or anagrafica_fields.get("codice_multi")
                 or f"R{riga.pk}"
             )
-        # tipo_soggetto: se non mappato e nemmeno dal contesto, segnala errore poi.
 
     return anagrafica_fields, extra_kv, ces_derivati
 
@@ -320,6 +355,9 @@ def _apply_single_row(riga: ImportRow, sessione: ImportSession, stats: ApplyStat
     if "codice_cli" in payload and not payload["codice_cli"]:
         payload["codice_cli"] = None
 
+    # Warning da memorizzare come DatoImportato dopo la create (campo per campo).
+    import_warnings: list[str] = []
+
     try:
         with transaction.atomic():
             if is_new:
@@ -329,8 +367,10 @@ def _apply_single_row(riga: ImportRow, sessione: ImportSession, stats: ApplyStat
                     raise ValueError(
                         f"Campi obbligatori mancanti: {', '.join(missing)}"
                     )
-                # Pre-check conflitti su codici univoci: messaggio user-friendly
-                # invece dell'IntegrityError grezzo di Postgres.
+                # Pre-check conflitti su codici univoci: invece di bloccare,
+                # degradiamo il valore a None sulla nuova anagrafica e teniamo
+                # traccia del conflitto come `DatoImportato`. L'utente potra'
+                # poi decidere cosa fare (es. fondere i due record).
                 for code_field in _UNIQUE_CODE_FIELDS:
                     code_value = payload.get(code_field)
                     if not code_value:
@@ -342,11 +382,18 @@ def _apply_single_row(riga: ImportRow, sessione: ImportSession, stats: ApplyStat
                         .first()
                     )
                     if existing:
-                        raise ValueError(
-                            f"{code_field} {code_value!r} già usato da "
-                            f"'{existing.denominazione}' (id {existing.pk}). "
-                            f"Conferma il match invece di creare una nuova anagrafica."
+                        import_warnings.append(
+                            f"{code_field}={code_value!r} non importato: "
+                            f"già in uso da '{existing.denominazione}' (id {existing.pk})"
                         )
+                        # codice_cli e' nullable: setta None. codice_fiscale
+                        # e partita_iva non sono nullable -> stringa vuota.
+                        payload[code_field] = None if code_field == "codice_cli" else ""
+
+                # Garantisci unicita' del codice_interno con auto-suffix.
+                payload["codice_interno"] = _make_unique_codice_interno(
+                    str(payload.get("codice_interno") or f"R{riga.pk}")
+                )
                 anagrafica = Anagrafica.objects.create(**payload)
                 stats.create += 1
             else:
@@ -368,6 +415,18 @@ def _apply_single_row(riga: ImportRow, sessione: ImportSession, stats: ApplyStat
                     defaults={"valore": val},
                 )
                 stats.dati_importati += 1
+
+            # Warning di import: codici univoci in conflitto degradati a vuoto.
+            # Memorizzati in DatoImportato per audit successivo. La constraint
+            # UniqueConstraint(anagrafica, chiave, fonte_session) richiede una
+            # sola riga per chiave; concateniamo i warning con newline.
+            if import_warnings:
+                DatoImportato.objects.update_or_create(
+                    anagrafica=anagrafica,
+                    chiave="import_warning",
+                    fonte_session=sessione,
+                    defaults={"valore": "\n".join(import_warnings)},
+                )
 
             # Alias: se il file ha una denominazione diversa da quella dell'anagrafica
             # esistente, registriamola per i futuri match.

@@ -39,7 +39,14 @@
             class="rounded-md border border-slate-300 px-3 py-1 hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800">
         Cerca
     </button>
-    {% if q or f_codice or f_denominazione or f_cf or f_piva or f_tipo or f_stato or f_regime or f_iva or sort != "denominazione" %}
+    {% if n_incomplete %}
+    <a href="?{% if f_incompleto == '1' %}{% else %}f_incompleto=1{% endif %}"
+       class="rounded-md border px-3 py-1 text-xs
+              {% if f_incompleto == '1' %}border-amber-500 bg-amber-50 text-amber-800{% else %}border-amber-300 text-amber-700 hover:bg-amber-50{% endif %}">
+        {% if f_incompleto == '1' %}✓ {% endif %}Da completare ({{ n_incomplete }})
+    </a>
+    {% endif %}
+    {% if q or f_codice or f_denominazione or f_cf or f_piva or f_tipo or f_stato or f_regime or f_iva or f_incompleto or sort != "denominazione" %}
         <a href="{% url 'anagrafica:list' %}" class="text-xs text-slate-500 hover:underline">Azzera filtri</a>
     {% endif %}
     <span class="ml-auto text-[11px] text-slate-400">
