@@ -36,6 +36,11 @@
         {{ form.non_field_errors }}
       </div>
     {% endif %}
+    {% if form.errors and not form.non_field_errors %}
+      <div class="rounded border border-red-200 bg-red-50 p-2 text-sm text-red-800">
+        Correggi gli errori sui campi indicati e riprova.
+      </div>
+    {% endif %}
 
     <div>
       <label class="block text-sm font-medium mb-1" for="{{ form.nome.id_for_label }}">Nome sessione</label>
@@ -79,6 +84,7 @@
     <div>
       <label class="block text-sm font-medium mb-1" for="{{ form.fonte_sessione.id_for_label }}">{{ form.fonte_sessione.label }}</label>
       {{ form.fonte_sessione }}
+      {% if form.fonte_sessione.errors %}<p class="mt-1 text-xs text-red-600">{{ form.fonte_sessione.errors|join:", " }}</p>{% endif %}
       <p class="mt-1 text-xs text-slate-500">{{ form.fonte_sessione.help_text }}</p>
     </div>
 
