@@ -1,28 +1,24 @@
-{% load anagrafica_extras %}
+{% load adempimenti_extras %}
+{% comment %}
+Righe della tabella LIPE-trim. Le celle vengono renderizzate dal dispatcher
+`adempimenti/cells/_cell.html` ciclando sulle `columns` configurate.
+`editable_inline=True` abilita per stato/data_invio/protocollo_invio/note
+il click-to-edit HTMX (vedi `_lipe_cell_display.html`).
+{% endcomment %}
 {% for r in righe %}
 <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40">
     <td class="px-2">
         <input type="checkbox" name="ids" value="{{ r.pk }}" class="bulk-check">
     </td>
-    <td class="px-3 font-mono text-xs">{{ r.anagrafica.codice_multi|default:"—" }}</td>
-    <td class="px-3">
-        <a href="{{ r.anagrafica.get_absolute_url }}" class="font-medium hover:underline">
-            {{ r.anagrafica.denominazione }}
-        </a>
-    </td>
-    <td class="px-3 text-xs" title="{{ r.anagrafica.get_contabilita_display }}">{{ r.anagrafica.contabilita|micro_label:"contabilita" }}</td>
-    <td class="px-3 text-xs">{{ r.anagrafica.get_regime_contabile_display|default:"—" }}</td>
-    <td class="px-3 text-xs">{{ r.anagrafica.get_periodicita_iva_display|default:"—" }}</td>
-    {% include "adempimenti/_lipe_cell_display.html" with r=r field="stato" catalogo_id=tipo.pk %}
-    {# data_invio: nascosta — utile in futuro, non eliminata #}
-    {% include "adempimenti/_lipe_cell_display.html" with r=r field="data_invio" extra_class="hidden" catalogo_id=tipo.pk %}
-    {% include "adempimenti/_lipe_cell_display.html" with r=r field="protocollo_invio" catalogo_id=tipo.pk %}
+    {% for col in columns %}
+        {% include "adempimenti/cells/_cell.html" with column=col record=r anno=anno editable_inline=True %}
+    {% endfor %}
     <td class="px-3 text-right">
         <a href="{{ r.get_absolute_url }}" class="text-[11px] text-brand-700 hover:underline">Apri</a>
     </td>
 </tr>
 {% empty %}
-<tr><td colspan="9" class="px-3 py-8 text-center text-sm text-slate-500">
+<tr><td colspan="{{ columns|length|add:2 }}" class="px-3 py-8 text-center text-sm text-slate-500">
     Nessuna riga per {{ anno }} Q{{ periodo }}. Genera in massa con
     <code class="rounded bg-slate-100 px-1 dark:bg-slate-800">manage.py genera_adempimenti --tipo {{ tipo.codice }} --anno {{ anno }}</code>
     oppure aggiungi un cliente manualmente con il pulsante in alto.

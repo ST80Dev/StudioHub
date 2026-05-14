@@ -13,6 +13,24 @@ Nota: questo dispatcher tiene il sistema "leggero" — un singolo partial con
 if/elif per codice. Se in futuro una cella diventa molto complessa, si puo'
 estrarre in un sotto-partial dedicato.
 {% endcomment %}
+{% comment %}
+Per le colonne per-periodo editabili inline (stato, data_invio,
+protocollo_invio, note) ci appoggiamo a `_lipe_cell_display.html` che
+genera direttamente il `<td>` con hooks HTMX. Per le altre, generiamo qui
+il `<td>` col contenuto specifico.
+
+Nota: nelle viste aggregate (es. LIPE-anno) `editable_inline` non e' True
+e queste colonne non rientrano nel ciclo (escluse da `PER_PERIOD_CODES`).
+{% endcomment %}
+{% if column.code == "stato" and editable_inline and record.pk %}
+    {% include "adempimenti/_lipe_cell_display.html" with r=record field="stato" catalogo_id=record.tipo_id %}
+{% elif column.code == "data_invio" and editable_inline and record.pk %}
+    {% include "adempimenti/_lipe_cell_display.html" with r=record field="data_invio" catalogo_id=record.tipo_id %}
+{% elif column.code == "protocollo_invio" and editable_inline and record.pk %}
+    {% include "adempimenti/_lipe_cell_display.html" with r=record field="protocollo_invio" catalogo_id=record.tipo_id %}
+{% elif column.code == "note" and editable_inline and record.pk %}
+    {% include "adempimenti/_lipe_cell_display.html" with r=record field="note" catalogo_id=record.tipo_id %}
+{% else %}
 {% with anag=record.anag|default:record.anagrafica %}
 <td class="{{ column.css_td }}">
     {% if column.code == "cliente" %}
@@ -39,6 +57,10 @@ estrarre in un sotto-partial dedicato.
         {% include "adempimenti/cells/_referente_inline.html" with anag=anag ruolo="responsabile_consulenza" anno=anno %}
     {% elif column.code == "stato" %}
         {% if record.stato %}{% include "adempimenti/_stato_badge.html" with stato=record.stato tipo_id=record.tipo_id %}{% else %}<span class="text-slate-300">—</span>{% endif %}
+    {% elif column.code == "data_invio" %}
+        {{ record.data_invio|date:"d/m/Y"|default:"—" }}
+    {% elif column.code == "protocollo_invio" %}
+        {{ record.protocollo_invio|default:"—" }}
     {% elif column.code == "note" %}
         {% include "adempimenti/cells/_note_inline.html" with record=record %}
     {% else %}
@@ -46,3 +68,4 @@ estrarre in un sotto-partial dedicato.
     {% endif %}
 </td>
 {% endwith %}
+{% endif %}
