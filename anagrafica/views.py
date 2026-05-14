@@ -492,12 +492,18 @@ def diagnostica(request):
 def diagnostica_remap(request):
     """Rimappa tutti i record con valore_orfano del campo verso valore_target.
 
-    POST: field, from_value, to_value. Solo campi nella whitelist, e to_value
-    deve essere fra i valori canonici delle choices.
+    POST:
+      - field, from_value, to_value: come prima.
+      - preserve_tag: se "1", il valore originale viene preservato come
+        `Categoria` (tag) assegnata a tutte le anagrafiche interessate
+        prima del bulk update. Cosi' l'informazione semantica non si
+        perde (es. `cassa_reg` -> Categoria "cassa_reg" + regime_contabile
+        normalizzato a "semplificato").
     """
     field = request.POST.get("field", "")
     from_value = request.POST.get("from_value", "")
     to_value = request.POST.get("to_value", "")
+    preserve_tag = request.POST.get("preserve_tag") == "1"
 
     if field not in _DIAG_FIELDS:
         return HttpResponseBadRequest("Campo non ammesso.")
@@ -505,13 +511,45 @@ def diagnostica_remap(request):
     if to_value not in choices_cls.values:
         return HttpResponseBadRequest("Valore target non canonico.")
 
+    qs = Anagrafica.objects.filter(is_deleted=False, **{field: from_value})
+
+    tag_label = ""
+    if preserve_tag and from_value:
+        # Crea/recupera la Categoria e l'assegna a tutti i clienti coinvolti
+        # PRIMA del bulk update (cosi' se l'update fallisse, il tag non
+        # rimane orfano - sarebbe inutile ma non dannoso).
+        tag_label = f"{field}:{from_value}"
+        cat, _created = Categoria.objects.get_or_create(
+            slug=slugify(tag_label)[:40],
+            defaults={
+                "denominazione": tag_label,
+                "descrizione": (
+                    f"Tag creato automaticamente dalla diagnostica: valore "
+                    f"originale {from_value!r} del campo {field} prima del "
+                    f"rimappa a {to_value!r}."
+                ),
+            },
+        )
+        # M2M `categorie`: bulk add
+        through = Anagrafica.categorie.through
+        existing_pairs = set(
+            through.objects.filter(categoria=cat, anagrafica__in=qs)
+            .values_list("anagrafica_id", flat=True)
+        )
+        to_add = [
+            through(anagrafica_id=pk, categoria=cat)
+            for pk in qs.values_list("pk", flat=True)
+            if pk not in existing_pairs
+        ]
+        if to_add:
+            through.objects.bulk_create(to_add, ignore_conflicts=True)
+
     # Confronto su stringa esatta: `from_value` può essere "" per rimappare i blank.
-    updated = (
-        Anagrafica.objects.filter(is_deleted=False, **{field: from_value})
-        .update(**{field: to_value})
-    )
+    updated = qs.update(**{field: to_value})
+
+    extra_msg = f" (categoria '{tag_label}' applicata)" if preserve_tag and from_value else ""
     messages.success(
         request,
-        f"Rimappati {updated} record: {field} '{from_value or '(vuoto)'}' → '{to_value}'.",
+        f"Rimappati {updated} record: {field} '{from_value or '(vuoto)'}' → '{to_value}'{extra_msg}.",
     )
     return redirect("anagrafica:diagnostica")
