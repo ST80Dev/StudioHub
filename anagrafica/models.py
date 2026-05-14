@@ -228,6 +228,30 @@ class Anagrafica(models.Model):
     def is_entita(self) -> bool:
         return self.tipo_soggetto in TIPI_ENTITA
 
+    # Override dei `get_<field>_display` per leggere le label override-aware
+    # da TextChoiceLabel (Fase 1 refactor data-driven). Il codice del campo
+    # resta CharField con choices fisse, ma l'etichetta visualizzata diventa
+    # modificabile da admin.
+    def get_tipo_soggetto_display(self) -> str:
+        from .choices_labels import get_label
+        return get_label("tipo_soggetto", self.tipo_soggetto)
+
+    def get_stato_display(self) -> str:
+        from .choices_labels import get_label
+        return get_label("stato", self.stato)
+
+    def get_regime_contabile_display(self) -> str:
+        from .choices_labels import get_label
+        return get_label("regime_contabile", self.regime_contabile)
+
+    def get_periodicita_iva_display(self) -> str:
+        from .choices_labels import get_label
+        return get_label("periodicita_iva", self.periodicita_iva)
+
+    def get_contabilita_display(self) -> str:
+        from .choices_labels import get_label
+        return get_label("contabilita", self.contabilita)
+
 
 class RuoloReferenteStudio(models.TextChoices):
     ADDETTO_CONTABILITA = "addetto_contabilita", "Addetto contabilità"
@@ -411,3 +435,56 @@ class ProgressioneContabilitaLog(models.Model):
             f"{self.anagrafica} — {self.anno}: "
             f"mese {self.mese_ultimo_registrato} al {self.rilevato_il}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Override delle label dei TextChoices (Fase 1 del refactor data-driven)
+# ---------------------------------------------------------------------------
+#
+# Tabella di "shadow" che permette di modificare le label visualizzate dei
+# valori delle TextChoices (`TipoSoggetto`, `StatoAnagrafica`, etc.) da
+# Django admin senza intervento programmatore. I valori (codici) restano
+# stabili nel codice; cambia solo il testo mostrato all'utente.
+#
+# Un singolo modello gestisce tutti i 5 enum identificato dalla coppia
+# `(field, codice)`. Lookup via helper cached in `anagrafica.choices_labels`.
+
+class TextChoiceLabel(models.Model):
+    FIELD_CHOICES = [
+        ("tipo_soggetto",    "Tipo soggetto"),
+        ("stato",            "Stato anagrafica"),
+        ("regime_contabile", "Regime contabile"),
+        ("periodicita_iva",  "Periodicità IVA"),
+        ("contabilita",      "Tenuta contabilità"),
+    ]
+    field = models.CharField(
+        max_length=30, choices=FIELD_CHOICES, db_index=True,
+        help_text="Campo dell'anagrafica a cui si applica l'override.",
+    )
+    codice = models.CharField(
+        max_length=30, db_index=True,
+        help_text="Codice del valore (es. 'PF', 'attivo'). Stabile, non rinominare.",
+    )
+    label = models.CharField(
+        max_length=80,
+        help_text="Etichetta mostrata all'utente (modificabile liberamente).",
+    )
+    descrizione = models.CharField(max_length=200, blank=True)
+    ordine = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Ordine di visualizzazione nei dropdown (asc).",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("field", "ordine", "label")
+        verbose_name = "Etichetta valore (override)"
+        verbose_name_plural = "Etichette valori (override)"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["field", "codice"], name="uniq_textchoicelabel_field_codice"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.get_field_display()}: {self.codice} → {self.label}"

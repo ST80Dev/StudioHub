@@ -9,6 +9,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
+from anagrafica import choices_labels as _choices_labels
 from anagrafica.models import (
     Anagrafica,
     AnagraficaReferenteStudio,
@@ -310,9 +311,9 @@ def lista_lipe(request):
         "f_protocollo": f_protocollo,
         # opzioni dei select
         "stati": StatoAdempimento.choices,
-        "regimi": RegimeContabile.choices,
-        "periodicita": PeriodicitaIVA.choices,
-        "contabilita_choices": GestioneContabilita.choices,
+        "regimi": _choices_labels.get_choices("regime_contabile"),
+        "periodicita": _choices_labels.get_choices("periodicita_iva"),
+        "contabilita_choices": _choices_labels.get_choices("contabilita"),
         # sort
         "sort": sort,
         "sort_field": sort_field,
@@ -425,9 +426,9 @@ def _render_lipe_anno(request, tipo, anno):
             "f_regime": f_regime,
             "f_iva": f_iva,
             # opzioni dei select
-            "regimi": RegimeContabile.choices,
-            "periodicita": PeriodicitaIVA.choices,
-            "contabilita_choices": GestioneContabilita.choices,
+            "regimi": _choices_labels.get_choices("regime_contabile"),
+            "periodicita": _choices_labels.get_choices("periodicita_iva"),
+            "contabilita_choices": _choices_labels.get_choices("contabilita"),
             # totali
             "totali": totali,
             "totale_lavorabile": totale_lavorabile,

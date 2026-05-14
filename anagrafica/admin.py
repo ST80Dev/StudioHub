@@ -5,6 +5,7 @@ from .models import (
     AnagraficaLegame,
     AnagraficaReferenteStudio,
     Categoria,
+    TextChoiceLabel,
 )
 
 
@@ -130,3 +131,22 @@ class LegameAdmin(admin.ModelAdmin):
         "anagrafica_collegata__denominazione",
     )
     autocomplete_fields = ("anagrafica", "anagrafica_collegata")
+
+
+@admin.register(TextChoiceLabel)
+class TextChoiceLabelAdmin(admin.ModelAdmin):
+    """Override delle etichette dei valori (TextChoices) dell'anagrafica.
+
+    Modificando la `label` di un record, l'intera UI mostra la nuova
+    etichetta per tutte le anagrafiche con quel codice. Il `codice`
+    e' l'identificativo stabile usato dal codice applicativo: non
+    rinominarlo se non sai cosa stai facendo.
+    """
+
+    list_display = ("field", "codice", "label", "ordine", "updated_at")
+    list_filter = ("field",)
+    search_fields = ("codice", "label", "descrizione")
+    list_editable = ("label", "ordine")
+    ordering = ("field", "ordine", "label")
+    fields = ("field", "codice", "label", "ordine", "descrizione", "updated_at")
+    readonly_fields = ("updated_at",)

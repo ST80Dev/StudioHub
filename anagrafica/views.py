@@ -3,6 +3,8 @@ from django.contrib.auth.decorators import login_required, user_passes_test
 from django.core.paginator import Paginator
 from django.db.models import Count, Q
 from django.http import HttpResponseBadRequest
+
+from . import choices_labels as _choices_labels
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
@@ -123,11 +125,12 @@ def lista_clienti(request):
         "tipo": f_tipo,
         "stato": f_stato,
         # opzioni dei select
-        "tipi_soggetto": TipoSoggetto.choices,
-        "stati": StatoAnagrafica.choices,
-        "regimi": RegimeContabile.choices,
-        "periodicita": PeriodicitaIVA.choices,
-        "contabilita_choices": GestioneContabilita.choices,
+        # Choices override-aware (label modificabili da admin via TextChoiceLabel)
+        "tipi_soggetto": _choices_labels.get_choices("tipo_soggetto"),
+        "stati": _choices_labels.get_choices("stato"),
+        "regimi": _choices_labels.get_choices("regime_contabile"),
+        "periodicita": _choices_labels.get_choices("periodicita_iva"),
+        "contabilita_choices": _choices_labels.get_choices("contabilita"),
         "totale": paginator.count,
         # sort corrente per indicatori UI
         "sort": sort,
