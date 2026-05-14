@@ -8,9 +8,9 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
-from anagrafica.models import Anagrafica
+from anagrafica.models import Anagrafica, AnagraficaReferenteStudio
 
-from .apply import preview_apply, run_apply
+from .apply import _REFERENTE_TARGETS, preview_apply, run_apply
 from .fields import (
     ANAGRAFICA_FIELDS_GROUPS,
     EXTRA_SUGGESTED,
@@ -19,6 +19,7 @@ from .fields import (
 from .forms import ImportSessionUploadForm
 from .matching import run_matching
 from .models import (
+    DatoImportato,
     ImportRow,
     ImportRowDecisione,
     ImportSession,
@@ -72,12 +73,33 @@ def session_create(request):
                         {"form": form},
                     )
 
-                sessione.column_mapping = autodetect_mapping(result.columns)
+                # Mapping di partenza: clone dalla sessione sorgente se
+                # selezionata (copia i target per i nomi colonna in comune),
+                # altrimenti autodetect dagli header.
+                fonte = form.cleaned_data.get("fonte_sessione")
+                if fonte:
+                    fonte_map = fonte.column_mapping or {}
+                    sessione.column_mapping = {
+                        col: fonte_map[col]
+                        for col in result.columns
+                        if col in fonte_map and fonte_map[col]
+                    }
+                    n_clonati = len(sessione.column_mapping)
+                    n_orfani = len(fonte_map) - n_clonati
+                    messages.info(
+                        request,
+                        f"Mapping clonato da '{fonte.nome}': "
+                        f"{n_clonati} colonne riprese, "
+                        f"{n_orfani} non presenti in questo file.",
+                    )
+                else:
+                    sessione.column_mapping = autodetect_mapping(result.columns)
                 sessione.riepilogo = {
                     "sheet_name": result.sheet_name,
                     "columns_detected": result.columns,
                     "sections_seen": result.sections_seen,
                     "rows_parsed": len(result.rows),
+                    "fonte_sessione_id": fonte.pk if fonte else None,
                 }
                 sessione.save(update_fields=["column_mapping", "riepilogo"])
 
@@ -145,6 +167,77 @@ def session_detail(request, pk: int):
     )
 
 
+def _non_empty_q(field_name: str):
+    """Per un campo Anagrafica, ritorna il Q che filtra i valori non-vuoti.
+    None se il campo non e' supportato per il conflict-check (es. FK)."""
+    from django.db.models import Q
+    try:
+        f = Anagrafica._meta.get_field(field_name)
+    except Exception:  # noqa: BLE001
+        return None
+    cls = f.__class__.__name__
+    if cls in ("CharField", "TextField", "EmailField", "SlugField"):
+        return ~Q(**{field_name: ""}) & ~Q(**{f"{field_name}__isnull": True})
+    if cls == "DateField":
+        return Q(**{f"{field_name}__isnull": False})
+    if cls == "BooleanField":
+        return Q(**{field_name: True})
+    if cls in ("IntegerField", "PositiveSmallIntegerField", "PositiveIntegerField"):
+        return ~Q(**{field_name: 0})
+    return None
+
+
+def _conflict_counts(sessione: ImportSession, mapping: dict) -> tuple[dict, int]:
+    """Per ogni colonna mappata, ritorna (conflict_counts, matched_total).
+
+    `conflict_counts[col]` = quante delle anagrafiche matchate (auto/confermato)
+    hanno gia' un valore non-vuoto nel target. Se la matching non e' ancora
+    stata eseguita (matched_total=0) ritorna ({}, 0): niente confronti possibili.
+    """
+    matched_ids = list(
+        sessione.righe.filter(
+            decisione__in=[
+                ImportRowDecisione.AUTO_MATCH, ImportRowDecisione.CONFERMATO,
+            ],
+            anagrafica_match_id__isnull=False,
+        ).values_list("anagrafica_match_id", flat=True)
+    )
+    matched_total = len(matched_ids)
+    if matched_total == 0 or not mapping:
+        return {}, matched_total
+
+    out: dict[str, int] = {}
+    for col, target in mapping.items():
+        if not target:
+            continue
+        if target in _REFERENTE_TARGETS:
+            ruolo = _REFERENTE_TARGETS[target]
+            out[col] = (
+                AnagraficaReferenteStudio.objects.filter(
+                    anagrafica_id__in=matched_ids,
+                    ruolo=ruolo, data_fine__isnull=True,
+                )
+                .values("anagrafica_id").distinct().count()
+            )
+        elif target.startswith("extra:"):
+            chiave = target[len("extra:"):]
+            out[col] = (
+                DatoImportato.objects.filter(
+                    anagrafica_id__in=matched_ids, chiave=chiave,
+                )
+                .exclude(valore="")
+                .values("anagrafica_id").distinct().count()
+            )
+        else:
+            q = _non_empty_q(target)
+            if q is None:
+                continue
+            out[col] = (
+                Anagrafica.objects.filter(pk__in=matched_ids).filter(q).count()
+            )
+    return out, matched_total
+
+
 @login_required
 def session_mapping_edit(request, pk: int):
     """Step 2: editor del mapping colonne -> campi target.
@@ -199,6 +292,11 @@ def session_mapping_edit(request, pk: int):
         if len(sample_values) == len(colonne):
             break
 
+    # Conflict counts: quanti record matchati hanno gia' un valore non vuoto
+    # nel target. Calcolati sul mapping SALVATO (non sui valori del form):
+    # serve a decidere se modificare il mapping prima di applicare.
+    conflicts, matched_total = _conflict_counts(sessione, sessione.column_mapping or {})
+
     rows_form = []
     for i, col in enumerate(colonne):
         target = mapping_attuale.get(col, "")
@@ -213,6 +311,7 @@ def session_mapping_edit(request, pk: int):
             "sample": sample_values.get(col, ""),
             "target": target,
             "extra_custom": extra_custom,
+            "conflict_count": conflicts.get(col),
         })
 
     return render(
@@ -223,6 +322,7 @@ def session_mapping_edit(request, pk: int):
             "rows": rows_form,
             "anagrafica_groups": ANAGRAFICA_FIELDS_GROUPS,
             "extra_suggested": EXTRA_SUGGESTED,
+            "matched_total": matched_total,
         },
     )
 
@@ -394,6 +494,29 @@ def session_apply_run(request, pk: int):
             f"Aggiornate: {stats.update}, Skip: {stats.skip}, "
             f"Dati importati: {stats.dati_importati}, Alias: {stats.alias_creati}.",
         )
+    return redirect("importazione:detail", pk=pk)
+
+
+@login_required
+@require_POST
+def session_toggle_consente_creazione(request, pk: int):
+    """Inverte il flag `consente_creazione` della sessione.
+
+    Permesso solo finche' la sessione non e' stata applicata o annullata:
+    una volta APPLICATA il flag non ha piu' effetto pratico e modificarlo
+    sarebbe fuorviante per l'audit.
+    """
+    sessione = get_object_or_404(ImportSession, pk=pk)
+    if sessione.stato in (ImportSessionStato.APPLICATA, ImportSessionStato.ANNULLATA):
+        messages.error(
+            request,
+            "Impossibile modificare il flag: la sessione e' gia' stata applicata o annullata.",
+        )
+    else:
+        sessione.consente_creazione = not sessione.consente_creazione
+        sessione.save(update_fields=["consente_creazione", "updated_at"])
+        nuovo = "abilitata" if sessione.consente_creazione else "disabilitata"
+        messages.success(request, f"Creazione di nuove anagrafiche {nuovo}.")
     return redirect("importazione:detail", pk=pk)
 
 

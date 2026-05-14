@@ -13,6 +13,7 @@ urlpatterns = [
     path("<int:pk>/decisione-bulk/", views.session_bulk_decisione, name="bulk_decisione"),
     path("<int:pk>/applica/", views.session_apply_preview, name="apply_preview"),
     path("<int:pk>/applica/esegui/", views.session_apply_run, name="apply_run"),
+    path("<int:pk>/toggle-creazione/", views.session_toggle_consente_creazione, name="toggle_consente_creazione"),
     path("<int:pk>/elimina/", views.session_delete, name="delete"),
     path("riga/<int:pk>/", views.row_update, name="row_update"),
     path("anagrafica/search/", views.anagrafica_search, name="anagrafica_search"),
