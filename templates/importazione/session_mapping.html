@@ -29,6 +29,16 @@
     {% endfor %}
   {% endif %}
 
+  {% if matched_total %}
+    <div class="mb-3 rounded border border-amber-200 bg-amber-50 dark:border-amber-800/50 dark:bg-amber-950/30 px-3 py-2 text-xs text-amber-900 dark:text-amber-100">
+      <span class="font-medium">Conflitti potenziali:</span>
+      per ogni colonna, accanto al select trovi il numero di anagrafiche
+      <strong>gi&agrave; matchate</strong> ({{ matched_total }}) che hanno gi&agrave;
+      un valore non vuoto in quel target. L'apply <em>sovrascrive</em>:
+      se non vuoi toccare un campo, imposta la colonna a "Ignora".
+    </div>
+  {% endif %}
+
   <form method="post" class="rounded border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
     {% csrf_token %}
     <table class="min-w-full text-sm">
@@ -64,6 +74,13 @@
                 {% endfor %}
               </optgroup>
             </select>
+            {% if r.conflict_count is not None %}
+              <p class="mt-1 text-[11px] {% if r.conflict_count > 0 %}text-amber-700 dark:text-amber-300{% else %}text-slate-400{% endif %}"
+                 title="Anagrafiche matchate che hanno gi&agrave; un valore in questo target. L'apply lo sovrascriver&agrave;.">
+                {% if r.conflict_count > 0 %}⚠{% else %}✓{% endif %}
+                {{ r.conflict_count }} con valore esistente
+              </p>
+            {% endif %}
           </td>
           <td class="px-3 py-2 align-top">
             <div class="flex items-center gap-1">

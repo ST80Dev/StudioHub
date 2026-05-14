@@ -6,6 +6,22 @@ from .models import ImportSession
 class ImportSessionUploadForm(forms.ModelForm):
     """Step 1 del wizard: upload file + metadata."""
 
+    fonte_sessione = forms.ModelChoiceField(
+        queryset=ImportSession.objects.none(),  # popolato in __init__
+        required=False,
+        label="Riusa mapping da",
+        help_text=(
+            "Opzionale: copia il mapping colonne (e le altre impostazioni) "
+            "da una sessione precedente con header simili. Le colonne con "
+            "stesso nome avranno lo stesso target; le nuove resteranno da mappare."
+        ),
+        widget=forms.Select(
+            attrs={
+                "class": "w-full rounded border-slate-300 dark:bg-slate-800 dark:border-slate-700",
+            }
+        ),
+    )
+
     class Meta:
         model = ImportSession
         fields = ("nome", "file", "sheet_name", "header_row", "consente_creazione", "note")
@@ -45,6 +61,16 @@ class ImportSessionUploadForm(forms.ModelForm):
                 }
             ),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Le sessioni candidate: quelle con un mapping non vuoto, le piu'
+        # recenti per prime, limite 30 (sufficiente per il dropdown).
+        # NB: queryset slicato e' valido per ModelChoiceField (lazy).
+        self.fields["fonte_sessione"].queryset = (
+            ImportSession.objects.exclude(column_mapping={})
+            .order_by("-created_at")[:30]
+        )
 
     def clean_file(self):
         f = self.cleaned_data["file"]

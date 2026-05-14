@@ -70,9 +70,16 @@
           <span class="block text-xs text-slate-500">
             Da attivare solo per il file master iniziale. Per i file successivi
             le righe non matchate vanno saltate o associate manualmente.
+            Modificabile anche dopo, finch&eacute; la sessione non &egrave; applicata.
           </span>
         </span>
       </label>
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium mb-1" for="{{ form.fonte_sessione.id_for_label }}">{{ form.fonte_sessione.label }}</label>
+      {{ form.fonte_sessione }}
+      <p class="mt-1 text-xs text-slate-500">{{ form.fonte_sessione.help_text }}</p>
     </div>
 
     <div>

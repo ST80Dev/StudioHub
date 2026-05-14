@@ -22,7 +22,18 @@
       Foglio: <span class="font-medium">{{ sessione.riepilogo.sheet_name|default:"—" }}</span> ·
       Righe lette: <span class="font-medium">{{ totale_righe }}</span> ·
       Sezioni: <span class="font-medium">{{ sessione.riepilogo.sections_seen|length }}</span> ·
-      Crea nuove: <span class="font-medium">{% if sessione.consente_creazione %}sì{% else %}no{% endif %}</span>
+      Crea nuove:
+      <span class="font-medium">{% if sessione.consente_creazione %}sì{% else %}no{% endif %}</span>
+      {% if sessione.stato != "applicata" and sessione.stato != "annullata" %}
+        <form method="post" action="{% url 'importazione:toggle_consente_creazione' sessione.pk %}" class="inline">
+          {% csrf_token %}
+          <button type="submit"
+                  class="ml-1 rounded border border-slate-300 dark:border-slate-700 px-1.5 py-0 text-[11px] text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  title="Inverti il flag (solo finch&eacute; non applicata)">
+            inverti
+          </button>
+        </form>
+      {% endif %}
     </p>
   </header>
 
