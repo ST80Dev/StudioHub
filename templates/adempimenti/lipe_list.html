@@ -223,19 +223,29 @@ comunque).
                     </th>
                     {% include "anagrafica/_sort_header.html" with label="Cod Multi" field="anagrafica__codice_multi" %}
                     {% include "anagrafica/_sort_header.html" with label="Cliente" field="anagrafica__denominazione" %}
+                    {% include "anagrafica/_sort_header.html" with label="Tipo" field="anagrafica__tipo_soggetto" %}
                     {% include "anagrafica/_sort_header.html" with label="Contab" field="anagrafica__contabilita" %}
                     {% include "anagrafica/_sort_header.html" with label="Regime" field="anagrafica__regime_contabile" %}
                     {% include "anagrafica/_sort_header.html" with label="IVA" field="anagrafica__periodicita_iva" %}
+                    <th class="px-3" title="Addetti contabilità">Addetti</th>
+                    <th class="px-3" title="Responsabili consulenza">Consul.</th>
                     {% include "anagrafica/_sort_header.html" with label="Stato" field="stato" %}
                     {# Data invio: header nascosto, sort/filtro disponibili via URL #}
                     <th class="hidden"></th>
                     {% include "anagrafica/_sort_header.html" with label="N° Fornitura" field="protocollo_invio" %}
+                    <th class="px-3">Note</th>
                     <th class="px-3"></th>
                 </tr>
                 <tr class="bg-white dark:bg-slate-900 border-y border-slate-200 dark:border-slate-700">
                     <th class="px-2"></th>
                     <th class="px-1 py-1"><input form="filters-form" type="text" name="f_multi" value="{{ f_multi }}" placeholder="filtra" class="w-20 rounded border-slate-300 px-1 py-0.5 text-xs dark:bg-slate-800 dark:border-slate-700"></th>
                     <th class="px-1 py-1"><input form="filters-form" type="text" name="f_denominazione" value="{{ f_denominazione }}" placeholder="filtra" class="w-full rounded border-slate-300 px-1 py-0.5 text-xs dark:bg-slate-800 dark:border-slate-700"></th>
+                    <th class="px-1 py-1">
+                        <select form="filters-form" name="f_tipo" onchange="this.form.submit()" class="w-full rounded border-slate-300 px-1 py-0.5 text-xs dark:bg-slate-800 dark:border-slate-700">
+                            <option value="">tutti</option>
+                            {% for val, lbl in tipi_soggetto %}<option value="{{ val }}" {% if f_tipo == val %}selected{% endif %}>{{ lbl }}</option>{% endfor %}
+                        </select>
+                    </th>
                     <th class="px-1 py-1">
                         <select form="filters-form" name="f_contab" onchange="this.form.submit()" class="w-full rounded border-slate-300 px-1 py-0.5 text-xs dark:bg-slate-800 dark:border-slate-700">
                             <option value="">tutti</option>
@@ -254,6 +264,8 @@ comunque).
                             {% for val, lbl in periodicita %}<option value="{{ val }}" {% if f_iva == val %}selected{% endif %}>{{ lbl }}</option>{% endfor %}
                         </select>
                     </th>
+                    <th class="px-1 py-1"></th>
+                    <th class="px-1 py-1"></th>
                     <th class="px-1 py-1">
                         <select form="filters-form" name="f_stato" onchange="this.form.submit()" class="w-full rounded border-slate-300 px-1 py-0.5 text-xs dark:bg-slate-800 dark:border-slate-700">
                             <option value="">tutti</option>
@@ -262,6 +274,7 @@ comunque).
                     </th>
                     <th class="hidden"></th>
                     <th class="px-1 py-1"><input form="filters-form" type="text" name="f_protocollo" value="{{ f_protocollo }}" placeholder="filtra" class="w-full rounded border-slate-300 px-1 py-0.5 text-xs dark:bg-slate-800 dark:border-slate-700"></th>
+                    <th class="px-1 py-1"><input form="filters-form" type="text" name="f_note" value="{{ f_note }}" placeholder="filtra" class="w-full rounded border-slate-300 px-1 py-0.5 text-xs dark:bg-slate-800 dark:border-slate-700"></th>
                     <th class="px-1 py-1"></th>
                 </tr>
             </thead>

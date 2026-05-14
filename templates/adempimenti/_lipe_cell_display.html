@@ -16,6 +16,9 @@ Parametri: `r` (Adempimento), `field` (uno fra: stato, data_invio, protocollo_in
     <span class="tabular-nums text-xs">{{ r.data_invio|date:"d/m/Y"|default:"—" }}</span>
   {% elif field == "protocollo_invio" %}
     <span class="font-mono text-xs">{{ r.protocollo_invio|default:"—" }}</span>
+  {% elif field == "note" %}
+    {# Note: campo libero. Tronco visivamente, tooltip mostra il testo intero. #}
+    <span class="block max-w-[14rem] truncate text-xs" title="{{ r.note }}">{{ r.note|default:"—" }}</span>
   {% else %}
     <span class="text-xs">{% with v=r|get_attr:field %}{{ v|default:"—" }}{% endwith %}</span>
   {% endif %}

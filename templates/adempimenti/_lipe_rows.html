@@ -10,19 +10,33 @@
             {{ r.anagrafica.denominazione }}
         </a>
     </td>
+    <td class="px-3 text-xs" title="{{ r.anagrafica.get_tipo_soggetto_display }}">
+        {% if r.anagrafica.tipo_soggetto %}
+            <span class="inline-flex rounded bg-slate-100 px-1.5 text-[11px] font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-300">{{ r.anagrafica.tipo_soggetto|micro_label:"tipo_soggetto" }}</span>
+        {% else %}—{% endif %}
+    </td>
     <td class="px-3 text-xs" title="{{ r.anagrafica.get_contabilita_display }}">{{ r.anagrafica.contabilita|micro_label:"contabilita" }}</td>
     <td class="px-3 text-xs">{{ r.anagrafica.get_regime_contabile_display|default:"—" }}</td>
     <td class="px-3 text-xs">{{ r.anagrafica.get_periodicita_iva_display|default:"—" }}</td>
+    {# Addetti / Consulenti: liste pre-calcolate dalla view (referenti
+       attivi nell'anno fiscale). Username + ★ se principale. #}
+    <td class="px-3 text-xs">
+        {% for ref in r.addetti_list %}<span title="{{ ref.utente.get_full_name|default:ref.utente.username }}{% if ref.principale %} (principale){% endif %}">{{ ref.utente.username }}{% if ref.principale %}★{% endif %}</span>{% if not forloop.last %}, {% endif %}{% empty %}<span class="text-slate-300">—</span>{% endfor %}
+    </td>
+    <td class="px-3 text-xs">
+        {% for ref in r.consulenti_list %}<span title="{{ ref.utente.get_full_name|default:ref.utente.username }}{% if ref.principale %} (principale){% endif %}">{{ ref.utente.username }}{% if ref.principale %}★{% endif %}</span>{% if not forloop.last %}, {% endif %}{% empty %}<span class="text-slate-300">—</span>{% endfor %}
+    </td>
     {% include "adempimenti/_lipe_cell_display.html" with r=r field="stato" %}
     {# data_invio: nascosta — utile in futuro, non eliminata #}
     {% include "adempimenti/_lipe_cell_display.html" with r=r field="data_invio" extra_class="hidden" %}
     {% include "adempimenti/_lipe_cell_display.html" with r=r field="protocollo_invio" %}
+    {% include "adempimenti/_lipe_cell_display.html" with r=r field="note" %}
     <td class="px-3 text-right">
         <a href="{{ r.get_absolute_url }}" class="text-[11px] text-brand-700 hover:underline">Apri</a>
     </td>
 </tr>
 {% empty %}
-<tr><td colspan="9" class="px-3 py-8 text-center text-sm text-slate-500">
+<tr><td colspan="13" class="px-3 py-8 text-center text-sm text-slate-500">
     Nessuna riga per {{ anno }} Q{{ periodo }}. Genera in massa con
     <code class="rounded bg-slate-100 px-1 dark:bg-slate-800">manage.py genera_adempimenti --tipo liquidazione-iva-trimestrale --anno {{ anno }}</code>
     oppure aggiungi un cliente manualmente con il pulsante in alto.

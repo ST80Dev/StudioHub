@@ -3,7 +3,7 @@ from datetime import date
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Count, Exists, OuterRef, Q
+from django.db.models import Count, Exists, OuterRef, Prefetch, Q
 from django.http import HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -17,6 +17,7 @@ from anagrafica.models import (
     PeriodicitaIVA,
     RegimeContabile,
     RuoloReferenteStudio,
+    TipoSoggetto,
 )
 
 from .models import (
@@ -154,6 +155,7 @@ LIPE_SORTABLE = {
     "anagrafica__denominazione",
     "anagrafica__codice_interno",
     "anagrafica__codice_multi",
+    "anagrafica__tipo_soggetto",
     "anagrafica__contabilita",
     "anagrafica__regime_contabile",
     "anagrafica__periodicita_iva",
@@ -219,9 +221,26 @@ def lista_lipe(request):
     if periodo not in (1, 2, 3, 4):
         periodo = 1
 
+    # Prefetch dei referenti del cliente che coprono l'anno fiscale. Evita
+    # N+1 nel render delle colonne Addetti/Consulenti.
+    inizio_anno = date(anno, 1, 1)
+    fine_anno = date(anno, 12, 31)
+    referenti_anno_qs = (
+        AnagraficaReferenteStudio.objects.filter(data_inizio__lte=fine_anno)
+        .filter(Q(data_fine__isnull=True) | Q(data_fine__gte=inizio_anno))
+        .select_related("utente")
+        .order_by("-principale", "utente__username")
+    )
+
     base_qs = Adempimento.objects.filter(
         is_deleted=False, tipo=tipo, anno_fiscale=anno, periodo=periodo,
-    ).select_related("anagrafica", "responsabile")
+    ).select_related("anagrafica", "responsabile").prefetch_related(
+        Prefetch(
+            "anagrafica__referenti_studio",
+            queryset=referenti_anno_qs,
+            to_attr="referenti_anno",
+        ),
+    )
 
     qs = base_qs
 
@@ -237,6 +256,10 @@ def lista_lipe(request):
     f_multi = (request.GET.get("f_multi") or "").strip()
     if f_multi:
         qs = qs.filter(anagrafica__codice_multi__icontains=f_multi)
+
+    f_tipo = request.GET.get("f_tipo") or ""
+    if f_tipo in TipoSoggetto.values:
+        qs = qs.filter(anagrafica__tipo_soggetto=f_tipo)
 
     f_contab = request.GET.get("f_contab") or ""
     if f_contab in GestioneContabilita.values:
@@ -257,6 +280,10 @@ def lista_lipe(request):
     f_protocollo = (request.GET.get("f_protocollo") or "").strip()
     if f_protocollo:
         qs = qs.filter(protocollo_invio__icontains=f_protocollo)
+
+    f_note = (request.GET.get("f_note") or "").strip()
+    if f_note:
+        qs = qs.filter(note__icontains=f_note)
 
     # Ordinamento
     sort = request.GET.get("sort", "anagrafica__denominazione")
@@ -287,6 +314,16 @@ def lista_lipe(request):
     paginator = Paginator(qs, 50)
     page = paginator.get_page(request.GET.get("page"))
 
+    # Splitta i referenti pre-fetchati per ruolo e li attacca alla riga
+    # come liste pronte per il template. Tutto in memoria, nessuna query
+    # ulteriore: `referenti_anno` e' gia' popolato dal Prefetch sopra.
+    ruolo_addetto = RuoloReferenteStudio.ADDETTO_CONTABILITA
+    ruolo_consul = RuoloReferenteStudio.RESPONSABILE_CONSULENZA
+    for r in page.object_list:
+        ref_list = getattr(r.anagrafica, "referenti_anno", []) or []
+        r.addetti_list = [x for x in ref_list if x.ruolo == ruolo_addetto]
+        r.consulenti_list = [x for x in ref_list if x.ruolo == ruolo_consul]
+
     # Stato della lista per il bottone "Crea elenco" / "Aggiorna elenco".
     lista_vuota = not base_qs.exists()
 
@@ -314,13 +351,16 @@ def lista_lipe(request):
         "f_denominazione": f_denom,
         "f_codice": f_codice,
         "f_multi": f_multi,
+        "f_tipo": f_tipo,
         "f_contab": f_contab,
         "f_regime": f_regime,
         "f_iva": f_iva,
         "f_stato": f_stato,
         "f_protocollo": f_protocollo,
+        "f_note": f_note,
         # opzioni dei select
         "stati": StatoAdempimento.choices,
+        "tipi_soggetto": _choices_labels.get_choices("tipo_soggetto"),
         "regimi": _choices_labels.get_choices("regime_contabile"),
         "periodicita": _choices_labels.get_choices("periodicita_iva"),
         "contabilita_choices": _choices_labels.get_choices("contabilita"),
