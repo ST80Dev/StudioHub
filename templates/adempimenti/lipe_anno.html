@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load anagrafica_extras %}
+{% load adempimenti_extras %}
 {% block title %}Liquidazione IVA Trimestrale {{ anno }} — anno intero — StudioHub{% endblock %}
 
 {% block content %}
@@ -139,38 +140,15 @@
 <div class="overflow-auto rounded-md border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
     <table class="sh-table sh-table-sticky-first w-full">
         <thead class="bg-slate-50 dark:bg-slate-800/40">
-            <tr class="text-left text-[11px] uppercase tracking-wider text-slate-500">
-                <th class="px-3 py-1">Codice</th>
-                <th class="px-3 py-1">Cliente</th>
-                <th class="px-3 py-1">Contab</th>
-                <th class="px-3 py-1">Regime</th>
-                <th class="px-3 py-1">IVA</th>
-                <th class="px-3 py-1 text-center">Q1</th>
-                <th class="px-3 py-1 text-center">Q2</th>
-                <th class="px-3 py-1 text-center">Q3</th>
-                <th class="px-3 py-1 text-center">Q4</th>
+            <tr>
+                {% for column in columns %}{% column_header column %}{% endfor %}
+                <th class="px-3 py-1 text-center text-[11px] uppercase tracking-wider text-slate-500">Q1</th>
+                <th class="px-3 py-1 text-center text-[11px] uppercase tracking-wider text-slate-500">Q2</th>
+                <th class="px-3 py-1 text-center text-[11px] uppercase tracking-wider text-slate-500">Q3</th>
+                <th class="px-3 py-1 text-center text-[11px] uppercase tracking-wider text-slate-500">Q4</th>
             </tr>
             <tr class="bg-white dark:bg-slate-900 border-y border-slate-200 dark:border-slate-700">
-                <th class="px-1 py-1"><input form="filters-form" type="text" name="f_codice" value="{{ f_codice }}" placeholder="filtra" class="w-20 rounded border-slate-300 px-1 py-0.5 text-xs dark:bg-slate-800 dark:border-slate-700"></th>
-                <th class="px-1 py-1"><input form="filters-form" type="text" name="f_denominazione" value="{{ f_denominazione }}" placeholder="filtra" class="w-full rounded border-slate-300 px-1 py-0.5 text-xs dark:bg-slate-800 dark:border-slate-700"></th>
-                <th class="px-1 py-1">
-                    <select form="filters-form" name="f_contab" onchange="this.form.submit()" class="w-full rounded border-slate-300 px-1 py-0.5 text-xs dark:bg-slate-800 dark:border-slate-700">
-                        <option value="">tutti</option>
-                        {% for val, lbl in contabilita_choices %}<option value="{{ val }}" {% if f_contab == val %}selected{% endif %}>{{ lbl }}</option>{% endfor %}
-                    </select>
-                </th>
-                <th class="px-1 py-1">
-                    <select form="filters-form" name="f_regime" onchange="this.form.submit()" class="w-full rounded border-slate-300 px-1 py-0.5 text-xs dark:bg-slate-800 dark:border-slate-700">
-                        <option value="">tutti</option>
-                        {% for val, lbl in regimi %}<option value="{{ val }}" {% if f_regime == val %}selected{% endif %}>{{ lbl }}</option>{% endfor %}
-                    </select>
-                </th>
-                <th class="px-1 py-1">
-                    <select form="filters-form" name="f_iva" onchange="this.form.submit()" class="w-full rounded border-slate-300 px-1 py-0.5 text-xs dark:bg-slate-800 dark:border-slate-700">
-                        <option value="">tutti</option>
-                        {% for val, lbl in periodicita %}<option value="{{ val }}" {% if f_iva == val %}selected{% endif %}>{{ lbl }}</option>{% endfor %}
-                    </select>
-                </th>
+                {% for column in columns %}{% column_filter column %}{% endfor %}
                 <th class="px-1 py-1"></th>
                 <th class="px-1 py-1"></th>
                 <th class="px-1 py-1"></th>
@@ -180,13 +158,7 @@
         <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
             {% for c in clienti_aggregati %}
             <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                <td class="px-3 font-mono text-xs">{{ c.anag.codice_interno }}</td>
-                <td class="px-3">
-                    <a href="{{ c.anag.get_absolute_url }}" class="font-medium hover:underline">{{ c.anag.denominazione }}</a>
-                </td>
-                <td class="px-3 text-xs" title="{{ c.anag.get_contabilita_display }}">{{ c.anag.contabilita|micro_label:"contabilita" }}</td>
-                <td class="px-3 text-xs">{{ c.anag.get_regime_contabile_display|default:"—" }}</td>
-                <td class="px-3 text-xs">{{ c.anag.get_periodicita_iva_display|default:"—" }}</td>
+                {% for column in columns %}{% include "adempimenti/cells/_cell.html" with record=c column=column anno=anno %}{% endfor %}
                 {% for q in "1234" %}
                 <td class="px-2 text-center">
                     {% with r=c.righe|get_attr:q %}
@@ -204,7 +176,7 @@
                 {% endfor %}
             </tr>
             {% empty %}
-            <tr><td colspan="9" class="px-3 py-8 text-center text-sm text-slate-500">
+            <tr><td colspan="{{ columns|length|add:4 }}" class="px-3 py-8 text-center text-sm text-slate-500">
                 Nessun cliente con righe per {{ anno }}. Genera l'elenco con il bottone in alto, o vai sui singoli trimestri.
             </td></tr>
             {% endfor %}
