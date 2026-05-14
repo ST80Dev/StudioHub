@@ -17,8 +17,10 @@
     <div class="flex items-center gap-3">
         {% include "partials/_paginator.html" with page_obj=page_obj %}
 
-        {# Crea / Aggiorna elenco. Stesso endpoint, etichetta diversa in base
-           al fatto che la lista per (anno, periodo) sia gia' popolata. #}
+        {% comment %}
+        Crea / Aggiorna elenco. Stesso endpoint, etichetta diversa in base
+        al fatto che la lista per (anno, periodo) sia gia' popolata.
+        {% endcomment %}
         <form method="post" action="{% url 'adempimenti:lipe_sincronizza' %}" class="inline-flex">
             {% csrf_token %}
             <input type="hidden" name="anno" value="{{ anno }}">
@@ -76,9 +78,11 @@
             {{ lbl }}
         </a>
         {% endfor %}
-        {# Pillola "Anno": vista aggregata con 1 riga per cliente e 4 celle Q1..Q4.
-           Utile per vedere tutti i trimestri insieme e capire chi e' valido per
-           alcuni trimestri ma non per altri. #}
+        {% comment %}
+        Pillola "Anno": vista aggregata con 1 riga per cliente e 4 celle Q1..Q4.
+        Utile per vedere tutti i trimestri insieme e capire chi e' valido per
+        alcuni trimestri ma non per altri.
+        {% endcomment %}
         <a href="?anno={{ anno }}&periodo=anno"
            title="Vista anno intero: 1 riga per cliente con tutti i 4 trimestri"
            class="px-3 py-1 text-sm border-l border-slate-300 dark:border-slate-700
@@ -109,15 +113,16 @@
     {% endif %}
 </div>
 
-{# Pannello "Caratteristiche cambiate dopo la generazione".
-
-   Sono righe ancora in lavorazione (DA_FARE / IN_CORSO / CHIUSA) per
-   clienti che, valutati oggi sulle caratteristiche correnti, NON sarebbero
-   applicabili al LIPE. NON significa che il cliente sia cessato come tale:
-   indica solo che il suo profilo fiscale e' cambiato rispetto a quando la
-   riga e' stata generata. L'utente decide manualmente cosa fare (marcare
-   "No dati", "Fanno loro", rimuovere la riga, o lasciar stare se va
-   completata comunque). #}
+{% comment %}
+Pannello "Caratteristiche cambiate dopo la generazione". Sono righe
+ancora in lavorazione (DA_FARE / IN_CORSO / CHIUSA) per clienti che,
+valutati oggi sulle caratteristiche correnti, NON sarebbero applicabili
+al LIPE. NON significa che il cliente sia cessato come tale: indica solo
+che il suo profilo fiscale e' cambiato rispetto a quando la riga e' stata
+generata. L'utente decide manualmente cosa fare (marcare "No dati",
+"Fanno loro", rimuovere la riga, o lasciar stare se va completata
+comunque).
+{% endcomment %}
 {% if obsoleti %}
 <details class="mb-3 rounded-md border border-amber-200 bg-amber-50 dark:border-amber-800/40 dark:bg-amber-950/30" open>
     <summary class="cursor-pointer px-3 py-2 text-sm">
