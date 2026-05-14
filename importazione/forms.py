@@ -64,12 +64,19 @@ class ImportSessionUploadForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Le sessioni candidate: quelle con un mapping non vuoto, le piu'
-        # recenti per prime, limite 30 (sufficiente per il dropdown).
-        # NB: queryset slicato e' valido per ModelChoiceField (lazy).
-        self.fields["fonte_sessione"].queryset = (
+        # Le sessioni candidate: 30 piu' recenti con mapping non vuoto.
+        # NB: NON slicare direttamente il queryset assegnato a ModelChoiceField.
+        # `.get()` (chiamato da `to_python` in fase di validazione) non e'
+        # ammesso su un QS slicato e silenziosamente fa fallire il form.
+        # Usiamo un filtro per PK list cosi' il queryset resta non-slicato.
+        recent_pks = list(
             ImportSession.objects.exclude(column_mapping={})
-            .order_by("-created_at")[:30]
+            .order_by("-created_at")
+            .values_list("pk", flat=True)[:30]
+        )
+        self.fields["fonte_sessione"].queryset = (
+            ImportSession.objects.filter(pk__in=recent_pks)
+            .order_by("-created_at")
         )
 
     def clean_file(self):
