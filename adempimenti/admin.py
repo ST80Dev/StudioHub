@@ -62,9 +62,12 @@ class StatoAdempimentoTipoInline(admin.TabularInline):
 
 @admin.register(TipoAdempimentoCatalogo)
 class TipoAdempimentoCatalogoAdmin(admin.ModelAdmin):
-    list_display = ("codice", "denominazione", "periodicita", "attivo", "ordine")
-    list_filter = ("periodicita", "attivo")
-    search_fields = ("codice", "denominazione")
+    list_display = (
+        "codice", "denominazione", "abbreviazione", "periodicita",
+        "ha_vista_dedicata", "attivo", "ordine",
+    )
+    list_filter = ("periodicita", "attivo", "ha_vista_dedicata")
+    search_fields = ("codice", "denominazione", "abbreviazione")
     inlines = [
         ScadenzaPeriodoInline,
         StatoAdempimentoTipoInline,

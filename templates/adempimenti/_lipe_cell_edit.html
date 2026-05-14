@@ -1,10 +1,10 @@
 {% load anagrafica_extras %}
 {% comment %}
-Cella in modalità edit (LIPE). Form HTMX: change/blur → POST a lipe_inline_save.
-Parametri: `r`, `field`, `meta` (widget, choices).
+Cella in modalità edit (vista tipo). Form HTMX: change/blur → POST a tipo_inline_save.
+Parametri: `r`, `field`, `meta` (widget, choices), `catalogo_id`.
 {% endcomment %}
 <td class="px-1 bg-amber-50 dark:bg-amber-950/40">
-  <form hx-post="{% url 'adempimenti:lipe_inline_save' r.pk field %}"
+  <form hx-post="{% url 'adempimenti:tipo_inline_save' catalogo_id r.pk field %}"
         hx-target="closest td"
         hx-swap="outerHTML"
         hx-trigger="change from:find select, change from:find input, blur from:find input delay:50ms"

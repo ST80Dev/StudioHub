@@ -19,7 +19,7 @@
         {% include "partials/_paginator.html" with page_obj=page_obj %}
 
         {# Aggiorna elenco: sincronizza TUTTI i 4 trimestri dell'anno in un colpo. #}
-        <form method="post" action="{% url 'adempimenti:lipe_sincronizza' %}" class="inline-flex">
+        <form method="post" action="{% url 'adempimenti:tipo_sincronizza' tipo.pk %}" class="inline-flex">
             {% csrf_token %}
             <input type="hidden" name="anno" value="{{ anno }}">
             {# periodo vuoto => tutti i periodi dell'anno #}
@@ -121,7 +121,7 @@
                     <td class="px-3 py-1">{{ o.anagrafica.get_regime_contabile_display|default:"—" }}</td>
                     <td class="px-3 py-1">{{ o.anagrafica.get_periodicita_iva_display|default:"—" }}</td>
                     <td class="px-3 py-1 text-right">
-                        <form method="post" action="{% url 'adempimenti:lipe_rimuovi_riga' o.pk %}" class="inline">
+                        <form method="post" action="{% url 'adempimenti:tipo_rimuovi_riga' tipo.pk o.pk %}" class="inline">
                             {% csrf_token %}
                             <input type="hidden" name="qs" value="{{ request.GET.urlencode }}">
                             <button type="submit"

@@ -31,10 +31,6 @@ from .models import (
 from .services import conta_obsoleti, sincronizza_adempimenti
 
 
-# Codice del tipo "Liquidazione IVA Trimestrale" (seed migration 0006).
-CODICE_LIPE = "liquidazione-iva-trimestrale"
-
-
 def _global_stati_choices() -> list[tuple[str, str]]:
     """Choices (codice, denominazione) per la vista generica adempimenti.
 
@@ -187,7 +183,7 @@ LIPE_SORTABLE = {
 
 # Campi modificabili inline + bulk per la vista LIPE.
 # Lo stato e' un select con choices DINAMICHE dal catalogo del tipo (vedi
-# `_lipe_inline_meta`). Sentinelle ammesse per "tipo widget":
+# `_tipo_inline_meta`). Sentinelle ammesse per "tipo widget":
 #  - "select_stato": dropdown popolato dal catalogo stati del tipo
 #  - "date"/"text": campi liberi
 LIPE_INLINE_FIELDS = {
@@ -204,12 +200,51 @@ LIPE_BULK_FIELDS = {
 }
 
 
-def _get_tipo_lipe():
-    return get_object_or_404(TipoAdempimentoCatalogo, codice=CODICE_LIPE)
+def _get_tipo_con_vista(catalogo_id: int):
+    """Recupera un tipo del catalogo che abbia la vista dedicata abilitata.
+
+    Identifica il tipo per PK (non per codice) così il codice resta libero
+    di essere rinominato dall'utente. Al momento la vista dedicata supporta
+    solo periodicità trimestrale (layout Q1..Q4); rifiutiamo qui i tipi che
+    sono stati marcati `ha_vista_dedicata` ma con periodicità diversa.
+    """
+    tipo = get_object_or_404(
+        TipoAdempimentoCatalogo,
+        pk=catalogo_id,
+        ha_vista_dedicata=True,
+    )
+    if tipo.periodicita != "trimestrale":
+        # Guardia: oggi il layout Q1..Q4 è l'unico supportato. Quando verrà
+        # generalizzato a mensile/annuale, rimuovere o ampliare questo check.
+        return get_object_or_404(
+            TipoAdempimentoCatalogo,
+            pk=0,  # forza 404
+        )
+    return tipo
 
 
-def _lipe_inline_meta(field: str, tipo_id: int | None = None):
-    """Metadati per il form di edit inline di una cella LIPE.
+def legacy_lipe_redirect(request):
+    """Redirect 301 dei vecchi URL `/adempimenti/liquidazione-iva-trimestrale/`
+    al nuovo URL basato su PK.
+
+    Mantiene la compatibilità con bookmark e link salvati. Sceglie il primo
+    tipo con `ha_vista_dedicata=True` e periodicità trimestrale (in pratica:
+    LIPE). Se non lo trova, 404.
+    """
+    tipo = TipoAdempimentoCatalogo.objects.filter(
+        ha_vista_dedicata=True, periodicita="trimestrale", attivo=True,
+    ).order_by("ordine", "denominazione").first()
+    if tipo is None:
+        return get_object_or_404(TipoAdempimentoCatalogo, pk=0)
+    qs = request.META.get("QUERY_STRING", "")
+    url = reverse("adempimenti:lista_tipo", args=[tipo.pk])
+    if qs:
+        url = f"{url}?{qs}"
+    return redirect(url, permanent=True)
+
+
+def _tipo_inline_meta(field: str, tipo_id: int | None = None):
+    """Metadati per il form di edit inline di una cella della vista tipo.
 
     Per `widget == 'select_stato'` la lista di scelte viene popolata
     dinamicamente dal catalogo stati del tipo (richiede `tipo_id`).
@@ -224,16 +259,19 @@ def _lipe_inline_meta(field: str, tipo_id: int | None = None):
 
 
 @login_required
-def lista_lipe(request):
-    """Lista dedicata alla Liquidazione IVA Trimestrale.
+def lista_tipo(request, catalogo_id: int):
+    """Lista dedicata per un tipo di adempimento con `ha_vista_dedicata=True`.
 
-    Filtra implicitamente per `tipo=liquidazione-iva-trimestrale`. Selettore
-    `anno` (default: anno corrente) e `periodo` (Q1..Q4, default Q1).
+    Oggi serve esclusivamente i tipi trimestrali (layout Q1..Q4); il primo
+    cliente reale è la Liquidazione IVA Trimestrale (LIPE). L'URL identifica
+    il tipo per PK, quindi il codice del catalogo è libero di essere
+    rinominato.
 
-    Caso speciale: `periodo=anno` -> vista aggregata 1 riga per cliente con
+    Selettore `anno` (default: anno corrente) e `periodo` (Q1..Q4, default Q1).
+    Caso speciale: `periodo=anno` → vista aggregata 1 riga per cliente con
     4 celle Q1..Q4. Vedi `_render_lipe_anno`.
     """
-    tipo = _get_tipo_lipe()
+    tipo = _get_tipo_con_vista(catalogo_id)
 
     oggi = date.today()
     try:
@@ -558,29 +596,29 @@ def _render_lipe_anno(request, tipo, anno):
 
 
 @login_required
-def lipe_inline_edit_form(request, pk: int, field: str):
+def tipo_inline_edit_form(request, catalogo_id: int, pk: int, field: str):
     riga = get_object_or_404(
         Adempimento.objects.select_related("anagrafica"),
-        pk=pk, is_deleted=False,
+        pk=pk, tipo_id=catalogo_id, is_deleted=False,
     )
-    meta = _lipe_inline_meta(field, tipo_id=riga.tipo_id)
+    meta = _tipo_inline_meta(field, tipo_id=catalogo_id)
     if not meta:
         return HttpResponseBadRequest("Campo non ammesso per l'edit inline.")
     return render(
         request,
         "adempimenti/_lipe_cell_edit.html",
-        {"r": riga, "field": field, "meta": meta},
+        {"r": riga, "field": field, "meta": meta, "catalogo_id": catalogo_id},
     )
 
 
 @login_required
 @require_POST
-def lipe_inline_save(request, pk: int, field: str):
+def tipo_inline_save(request, catalogo_id: int, pk: int, field: str):
     riga = get_object_or_404(
         Adempimento.objects.select_related("anagrafica"),
-        pk=pk, is_deleted=False,
+        pk=pk, tipo_id=catalogo_id, is_deleted=False,
     )
-    meta = _lipe_inline_meta(field, tipo_id=riga.tipo_id)
+    meta = _tipo_inline_meta(field, tipo_id=catalogo_id)
     if not meta:
         return HttpResponseBadRequest("Campo non ammesso per l'edit inline.")
     raw = (request.POST.get("value") or "").strip()
@@ -601,13 +639,14 @@ def lipe_inline_save(request, pk: int, field: str):
     return render(
         request,
         "adempimenti/_lipe_cell_display.html",
-        {"r": riga, "field": field},
+        {"r": riga, "field": field, "catalogo_id": catalogo_id},
     )
 
 
 @login_required
 @require_POST
-def lipe_bulk_update(request):
+def tipo_bulk_update(request, catalogo_id: int):
+    tipo = _get_tipo_con_vista(catalogo_id)
     field = request.POST.get("field", "")
     value = (request.POST.get("value") or "").strip()
     ids = request.POST.getlist("ids")
@@ -629,21 +668,21 @@ def lipe_bulk_update(request):
         db_value = str(n)
         human_value = db_value
     elif spec == "stato":
-        tipo_lipe = _get_tipo_lipe()
-        stato_obj = _stati.stato_by_codice(tipo_lipe.id, value)
+        stato_obj = _stati.stato_by_codice(tipo.id, value)
         if stato_obj is None:
-            return HttpResponseBadRequest("Stato non valido per LIPE.")
+            return HttpResponseBadRequest("Stato non valido per questo tipo.")
         db_value = value
         human_value = stato_obj.denominazione
     else:
         return HttpResponseBadRequest("Configurazione del campo bulk non valida.")
 
+    back_url = reverse("adempimenti:lista_tipo", args=[tipo.pk])
     if not ids:
         messages.warning(request, "Nessuna riga selezionata.")
-        return redirect(reverse("adempimenti:lipe") + "?" + (request.POST.get("qs") or ""))
+        return redirect(back_url + "?" + (request.POST.get("qs") or ""))
 
     updated = (
-        Adempimento.objects.filter(pk__in=ids, is_deleted=False)
+        Adempimento.objects.filter(pk__in=ids, tipo=tipo, is_deleted=False)
         .update(**{field: db_value})
     )
     messages.success(
@@ -651,18 +690,18 @@ def lipe_bulk_update(request):
         f"{updated} righe aggiornate: {field} → {human_value}.",
     )
     qs = request.POST.get("qs", "")
-    return redirect(reverse("adempimenti:lipe") + ("?" + qs if qs else ""))
+    return redirect(back_url + ("?" + qs if qs else ""))
 
 
 @login_required
 @require_POST
-def lipe_aggiungi_cliente(request):
-    """Crea manualmente una riga LIPE per un cliente (anche non applicabile).
+def tipo_aggiungi_cliente(request, catalogo_id: int):
+    """Crea manualmente una riga per un cliente (anche non applicabile).
 
     POST: anagrafica_id, anno, periodo, stato (default da_fare).
     Idempotente sul unique (anagrafica, tipo, anno, periodo).
     """
-    tipo = _get_tipo_lipe()
+    tipo = _get_tipo_con_vista(catalogo_id)
     try:
         anagrafica_id = int(request.POST.get("anagrafica_id") or 0)
         anno = int(request.POST.get("anno") or 0)
@@ -686,10 +725,11 @@ def lipe_aggiungi_cliente(request):
         anagrafica=anag, tipo=tipo, anno_fiscale=anno, periodo=periodo,
         defaults={"data_scadenza": data_scadenza, "stato": stato},
     )
+    sigla = tipo.etichetta_breve or tipo.denominazione
     if created:
         messages.success(
             request,
-            f"Aggiunta riga LIPE per {anag.denominazione} "
+            f"Aggiunta riga {sigla} per {anag.denominazione} "
             f"({anno} Q{periodo}) — stato {stato_obj.denominazione}.",
         )
     else:
@@ -699,13 +739,18 @@ def lipe_aggiungi_cliente(request):
         )
 
     return redirect(
-        reverse("adempimenti:lipe") + f"?anno={anno}&periodo={periodo}"
+        reverse("adempimenti:lista_tipo", args=[tipo.pk])
+        + f"?anno={anno}&periodo={periodo}"
     )
 
 
 @login_required
-def lipe_search_clienti(request):
+def tipo_search_clienti(request, catalogo_id: int):
     """Endpoint HTMX di autocompletamento clienti per il modale di aggiunta."""
+    # Il catalogo_id non viene usato per filtrare i clienti (si possono
+    # aggiungere anche clienti oggi non applicabili), ma è nel path per
+    # coerenza di scoping e per eventuali estensioni future.
+    _ = _get_tipo_con_vista(catalogo_id)
     q = (request.GET.get("q") or "").strip()
     risultati = []
     if len(q) >= 2:
@@ -728,14 +773,14 @@ def lipe_search_clienti(request):
 
 @login_required
 @require_POST
-def lipe_sincronizza(request):
-    """Crea / aggiorna l'elenco LIPE per (anno, periodo).
+def tipo_sincronizza(request, catalogo_id: int):
+    """Crea / aggiorna l'elenco per (tipo, anno, periodo).
 
     Stessa funzione usata dal management command `genera_adempimenti`:
     aggiunge le righe mancanti per i clienti oggi applicabili (idempotente).
     Non tocca mai righe esistenti. Mostra un toast con il riepilogo.
     """
-    tipo = _get_tipo_lipe()
+    tipo = _get_tipo_con_vista(catalogo_id)
     try:
         anno = int(request.POST.get("anno") or 0)
         # `periodo` opzionale: se vuoto, sincronizza tutti i periodi dell'anno.
@@ -765,21 +810,22 @@ def lipe_sincronizza(request):
         request, f"Sincronizzazione {scope}: " + ", ".join(parti) + "."
     )
 
-    # Ritorna alla pagina LIPE preservando anno/periodo (se passato un singolo
-    # periodo, lo si rivede; altrimenti rimane il periodo della query string).
     qs = request.POST.get("qs", "")
-    return redirect(reverse("adempimenti:lipe") + ("?" + qs if qs else ""))
+    back_url = reverse("adempimenti:lista_tipo", args=[tipo.pk])
+    return redirect(back_url + ("?" + qs if qs else ""))
 
 
 @login_required
 @require_POST
-def lipe_rimuovi_riga(request, pk: int):
-    """Soft-delete di una riga LIPE.
+def tipo_rimuovi_riga(request, catalogo_id: int, pk: int):
+    """Soft-delete di una riga.
 
     Usata dal pannello "Non più applicabili" per ripulire l'elenco senza
     perdere lo storico (la riga resta in DB con is_deleted=True).
     """
-    riga = get_object_or_404(Adempimento, pk=pk, is_deleted=False)
+    riga = get_object_or_404(
+        Adempimento, pk=pk, tipo_id=catalogo_id, is_deleted=False,
+    )
     riga.is_deleted = True
     riga.save(update_fields=["is_deleted", "updated_at"])
     messages.success(
@@ -788,4 +834,5 @@ def lipe_rimuovi_riga(request, pk: int):
         f"({riga.anno_fiscale} Q{riga.periodo or '—'}).",
     )
     qs = request.POST.get("qs", "")
-    return redirect(reverse("adempimenti:lipe") + ("?" + qs if qs else ""))
+    back_url = reverse("adempimenti:lista_tipo", args=[catalogo_id])
+    return redirect(back_url + ("?" + qs if qs else ""))

@@ -17,8 +17,28 @@ class Periodicita(models.TextChoices):
 
 
 class TipoAdempimentoCatalogo(models.Model):
-    codice = models.SlugField(max_length=40, unique=True)
+    codice = models.SlugField(
+        max_length=40,
+        unique=True,
+        help_text=(
+            "Identificativo tecnico stabile, usato dalle migration di seed "
+            "e come opzione di default per il comando CLI "
+            "`genera_adempimenti --tipo <codice>`. NON viene usato negli URL "
+            "(le pagine dedicate referenziano il tipo per PK). "
+            "Modificabile, ma se lo rinomini ricorda di aggiornare "
+            "eventuali script/CLI che lo passano come argomento."
+        ),
+    )
     denominazione = models.CharField(max_length=120)
+    abbreviazione = models.CharField(
+        max_length=8,
+        blank=True,
+        help_text=(
+            "Sigla breve mostrata in sidebar/badge/UI compatta "
+            "(es. 'LIPE', 'BILUE', 'F24'). Liberamente modificabile. "
+            "Se vuota, viene usato il fallback sulle prime lettere della denominazione."
+        ),
+    )
     periodicita = models.CharField(
         max_length=20, choices=Periodicita.choices, default=Periodicita.ANNUALE
     )
@@ -27,6 +47,14 @@ class TipoAdempimentoCatalogo(models.Model):
         help_text="Colore CSS per badge/sidebar (es. '#3b82f6', 'blue').",
     )
     attivo = models.BooleanField(default=True, db_index=True)
+    ha_vista_dedicata = models.BooleanField(
+        default=False,
+        help_text=(
+            "Se True, il tipo compare con un link diretto in sidebar e "
+            "apre la pagina dedicata (layout per periodo). "
+            "Al momento la vista dedicata supporta solo periodicità trimestrale."
+        ),
+    )
     note_regole = models.TextField(
         blank=True,
         help_text="Appunti interni sulla regola di scadenza.",
@@ -60,6 +88,12 @@ class TipoAdempimentoCatalogo(models.Model):
     @property
     def usa_evento_variabile(self) -> bool:
         return bool(self.etichetta_data_evento) and self.giorni_offset_da_evento is not None
+
+    @property
+    def etichetta_breve(self) -> str:
+        if self.abbreviazione:
+            return self.abbreviazione
+        return (self.denominazione[:8] or "").strip()
 
 
 class ScadenzaPeriodo(models.Model):
