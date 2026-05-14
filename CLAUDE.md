@@ -63,6 +63,49 @@ Quando si aggiunge un nuovo campo TextChoices al modello:
   `(field, codice, label, label_micro, ordine)` per ciascun valore;
 - aggiungerlo a `TextChoiceLabel.FIELD_CHOICES` in `models.py`.
 
+## Stati adempimento (catalogo per-tipo)
+
+Ogni `TipoAdempimentoCatalogo` ha il SUO set di stati di avanzamento
+(tabella `StatoAdempimentoTipo`). Non sono piu' un TextChoices fisso. Il
+set iniziale viene copiato da uno **Standard globale**
+(`StatoAdempimentoStandard`, editabile da admin Django) alla creazione del
+tipo (via signal `post_save`).
+
+Tre proprietà chiave per ogni stato:
+
+- **`lavorabile`** (bool) — se True, l'adempimento conta nel "lavoro
+  residuo". Cambiarlo permette di marcare nuovi stati terminali (es.
+  "archiviato") senza modifiche al codice.
+- **`livello`** (0..100) — progressione. 0 = non in scope (es. fanno_loro,
+  no_dati), 100 = completato (inviato). Usato anche come sort.
+- **`iniziale_default`** (bool) — uno solo a True per set: stato di
+  partenza per nuovi adempimenti di quel tipo.
+
+Stati copiati dallo Standard hanno `e_predefinito=True` e **non si
+possono eliminare** (modificabili sì). Per "nasconderli" si usa il
+flag `attivo=False`. Stati custom aggiunti dopo (e_predefinito=False)
+sono eliminabili se nessun adempimento li referenzia.
+
+Helper Python: `adempimenti.stati.stati_di_tipo(tipo_id)`,
+`stato_by_codice(tipo_id, codice)`, `codici_lavorabili(tipo_id)`,
+`stato_default(tipo_id)`, `choices(tipo_id)`. Cache module-level
+invalidata via signal su save/delete.
+
+Template tag per il badge: `{% load adempimenti_extras %}` poi
+`{% stato_badge adempimento %}` (preferito) o
+`{% stato_badge_by_codice tipo_id codice %}`. Il render legge
+denominazione + colore dal catalogo per-tipo: niente più
+if/elif hardcoded per codice in `_stato_badge.html`.
+
+Editabile da:
+- admin Django: `/admin/adempimenti/statoadempimentostandard/` per il set
+  globale, e inline "Stati (per tipo)" sul `TipoAdempimentoCatalogo`;
+- UI dedicata: `/configurazione/tipi/<id>/?tab=stati`.
+
+NB: modificare lo Standard **non** propaga retroattivamente sugli stati
+gia' copiati nei tipi (per non sovrascrivere personalizzazioni). Impatta
+solo le copie alla creazione di un nuovo tipo.
+
 ## Pattern UI per liste/tabelle
 
 Quando si costruisce una nuova lista/tabella di record (clienti,

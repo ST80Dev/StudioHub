@@ -1,7 +1,8 @@
 from django.contrib.auth.decorators import login_required
+from django.db.models import Exists, OuterRef
 from django.shortcuts import render
 
-from adempimenti.models import Adempimento, StatoAdempimento
+from adempimenti.models import Adempimento, StatoAdempimentoTipo
 from anagrafica.models import Anagrafica
 
 
@@ -13,9 +14,19 @@ def home(request):
         is_deleted=False, stato="attivo"
     ).count()
 
+    # "Miei adempimenti residui" = adempimenti assegnati a me, in uno stato
+    # ancora lavorabile. Il flag `lavorabile` vive sul catalogo stati DEL
+    # TIPO (cosi' un nuovo stato terminale aggiunto da admin viene escluso
+    # automaticamente senza modifiche al codice).
+    lavorabile_subq = StatoAdempimentoTipo.objects.filter(
+        tipo_adempimento=OuterRef("tipo"),
+        codice=OuterRef("stato"),
+        lavorabile=True,
+        attivo=True,
+    )
     miei_adempimenti = (
         Adempimento.objects.filter(is_deleted=False, responsabile=user)
-        .exclude(stato=StatoAdempimento.INVIATO)
+        .filter(Exists(lavorabile_subq))
         .select_related("anagrafica", "tipo")
         .order_by("data_scadenza")[:20]
     )

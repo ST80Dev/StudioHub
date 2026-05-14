@@ -13,10 +13,9 @@ from django.db import transaction
 
 from anagrafica.models import Anagrafica
 
+from . import stati as _stati
 from .models import (
     Adempimento,
-    STATI_LAVORABILI,
-    StatoAdempimento,
     TipoAdempimentoCatalogo,
 )
 
@@ -138,7 +137,8 @@ def sincronizza_adempimenti(
                     periodo=periodo,
                     defaults={
                         "data_scadenza": data_scadenza,
-                        "stato": StatoAdempimento.DA_FARE,
+                        # Stato iniziale dal catalogo del tipo (configurabile).
+                        "stato": _stati.stato_default(tipo.id),
                     },
                 )
                 if created:
@@ -155,7 +155,7 @@ def sincronizza_adempimenti(
                 tipo=tipo,
                 anno_fiscale=anno,
                 anagrafica_id__in=non_applicabili_ids,
-                stato__in=list(STATI_LAVORABILI),
+                stato__in=list(_stati.codici_lavorabili(tipo.id)),
             )
             if solo_periodo is not None:
                 obsoleti_qs = obsoleti_qs.filter(periodo=solo_periodo)
@@ -193,7 +193,7 @@ def conta_obsoleti(
         is_deleted=False,
         tipo=tipo,
         anno_fiscale=anno,
-        stato__in=list(STATI_LAVORABILI),
+        stato__in=list(_stati.codici_lavorabili(tipo.id)),
     ).select_related("anagrafica").prefetch_related("anagrafica__categorie")
     if periodo is not None:
         base = base.filter(periodo=periodo)

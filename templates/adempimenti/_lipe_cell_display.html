@@ -11,7 +11,7 @@ Parametri: `r` (Adempimento), `field` (uno fra: stato, data_invio, protocollo_in
     hx-swap="outerHTML"
     title="Clic per modificare">
   {% if field == "stato" %}
-    {% include "adempimenti/_stato_badge.html" with stato=r.stato %}
+    {% include "adempimenti/_stato_badge.html" with stato=r.stato tipo_id=r.tipo_id %}
   {% elif field == "data_invio" %}
     <span class="tabular-nums text-xs">{{ r.data_invio|date:"d/m/Y"|default:"—" }}</span>
   {% elif field == "protocollo_invio" %}

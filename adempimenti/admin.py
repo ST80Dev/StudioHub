@@ -7,6 +7,8 @@ from .models import (
     ChecklistStep,
     RegolaApplicabilita,
     ScadenzaPeriodo,
+    StatoAdempimentoStandard,
+    StatoAdempimentoTipo,
     StepCompletato,
     TipoAdempimentoCatalogo,
     VistaAdempimentoColonne,
@@ -32,12 +34,64 @@ class RegolaApplicabilitaInline(admin.TabularInline):
     extra = 1
 
 
+class StatoAdempimentoTipoInline(admin.TabularInline):
+    """Stati specifici del tipo adempimento.
+
+    Le righe `e_predefinito=True` sono state copiate dallo Standard alla
+    creazione del tipo: modificabili (label/sigla/colore/livello), NON
+    eliminabili. Le righe aggiunte manualmente (e_predefinito=False) sono
+    eliminabili come al solito.
+    """
+    model = StatoAdempimentoTipo
+    extra = 0
+    fields = (
+        "codice", "denominazione", "sigla", "colore",
+        "lavorabile", "livello", "iniziale_default",
+        "attivo", "e_predefinito",
+    )
+    readonly_fields = ("e_predefinito",)
+    ordering = ("livello", "denominazione")
+
+    def has_delete_permission(self, request, obj=None):
+        # Blocca la cancellazione degli stati predefiniti dall'inline.
+        # Quelli custom (`e_predefinito=False`) restano cancellabili tramite
+        # il flag `attivo` o eliminazione esplicita su ModelAdmin dedicato
+        # se necessario.
+        return False
+
+
 @admin.register(TipoAdempimentoCatalogo)
 class TipoAdempimentoCatalogoAdmin(admin.ModelAdmin):
     list_display = ("codice", "denominazione", "periodicita", "attivo", "ordine")
     list_filter = ("periodicita", "attivo")
     search_fields = ("codice", "denominazione")
-    inlines = [ScadenzaPeriodoInline, ChecklistStepInline, RegolaApplicabilitaInline]
+    inlines = [
+        ScadenzaPeriodoInline,
+        StatoAdempimentoTipoInline,
+        ChecklistStepInline,
+        RegolaApplicabilitaInline,
+    ]
+
+
+@admin.register(StatoAdempimentoStandard)
+class StatoAdempimentoStandardAdmin(admin.ModelAdmin):
+    """Set predefinito globale degli stati.
+
+    Modificando voci qui NON si tocca gli stati gia' assegnati ai tipi
+    esistenti (per non sovrascrivere personalizzazioni). Lo Standard impatta
+    solo le nuove copie alla creazione di un nuovo TipoAdempimentoCatalogo.
+    """
+    list_display = (
+        "codice", "denominazione", "sigla", "colore",
+        "lavorabile", "livello", "iniziale_default", "attivo",
+    )
+    list_filter = ("colore", "lavorabile", "attivo")
+    list_editable = (
+        "denominazione", "sigla", "colore",
+        "lavorabile", "livello", "iniziale_default", "attivo",
+    )
+    search_fields = ("codice", "denominazione")
+    ordering = ("livello", "denominazione")
 
 
 # ---------------------------------------------------------------------------

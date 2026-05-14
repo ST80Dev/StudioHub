@@ -38,7 +38,7 @@ estrarre in un sotto-partial dedicato.
     {% elif column.code == "referente_consul" %}
         {% include "adempimenti/cells/_referente_inline.html" with anag=anag ruolo="responsabile_consulenza" anno=anno %}
     {% elif column.code == "stato" %}
-        {% if record.stato %}{% include "adempimenti/_stato_badge.html" with stato=record.stato %}{% else %}<span class="text-slate-300">—</span>{% endif %}
+        {% if record.stato %}{% include "adempimenti/_stato_badge.html" with stato=record.stato tipo_id=record.tipo_id %}{% else %}<span class="text-slate-300">—</span>{% endif %}
     {% elif column.code == "note" %}
         {% include "adempimenti/cells/_note_inline.html" with record=record %}
     {% else %}

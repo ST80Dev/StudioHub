@@ -1,18 +1,13 @@
-{% if stato == 'inviato' %}
-    <span class="sh-state sh-state-done">Inviato</span>
-{% elif stato == 'chiusa' %}
-    <span class="sh-state sh-state-review">Chiusa</span>
-{% elif stato == 'controllato' %}
-    {# Stato legacy, ormai migrato a 'chiusa'. Lasciato per retrocompatibilità. #}
-    <span class="sh-state sh-state-review">Controllato</span>
-{% elif stato == 'in_corso' %}
-    <span class="sh-state sh-state-wip">In corso</span>
-{% elif stato == 'da_fare' %}
-    <span class="sh-state sh-state-todo">Da fare</span>
-{% elif stato == 'fanno_loro' %}
-    <span class="sh-state sh-state-idle">Fanno loro</span>
-{% elif stato == 'no_dati' %}
-    <span class="sh-state sh-state-idle">No dati</span>
-{% else %}
-    <span class="sh-state sh-state-idle">{{ stato }}</span>
-{% endif %}
+{% load adempimenti_extras %}
+{% comment %}
+Badge dello stato di un adempimento.
+
+Parametri di include:
+  stato      — codice dello stato (es. 'da_fare')
+  tipo_id    — id del TipoAdempimentoCatalogo della riga, per leggere
+               denominazione/colore dal catalogo per-tipo.
+
+Se `tipo_id` non e' fornito, il badge ricade su un lookup "any tipo" e
+in ultima istanza su un badge grigio con il codice raw.
+{% endcomment %}
+{% stato_badge_by_codice tipo_id stato %}

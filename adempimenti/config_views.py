@@ -22,21 +22,24 @@ from .forms import (
     ChecklistStepForm,
     RegolaApplicabilitaForm,
     ScadenzaPeriodoForm,
+    StatoAdempimentoTipoForm,
     TipoAdempimentoCatalogoForm,
 )
 from .models import (
     ChecklistStep,
     RegolaApplicabilita,
     ScadenzaPeriodo,
+    StatoAdempimentoTipo,
     TipoAdempimentoCatalogo,
 )
 
 
 TAB_GENERALE = "generale"
 TAB_SCADENZE = "scadenze"
+TAB_STATI = "stati"
 TAB_CHECKLIST = "checklist"
 TAB_REGOLE = "regole"
-TABS_VALIDI = {TAB_GENERALE, TAB_SCADENZE, TAB_CHECKLIST, TAB_REGOLE}
+TABS_VALIDI = {TAB_GENERALE, TAB_SCADENZE, TAB_STATI, TAB_CHECKLIST, TAB_REGOLE}
 
 
 def _redirect_tab(pk: int, tab: str):
@@ -98,6 +101,16 @@ def tipo_detail(request, pk: int):
     elif tab == TAB_SCADENZE:
         context["scadenze"] = tipo.scadenze.all().order_by("periodo")
         context["nuova_scadenza_form"] = ScadenzaPeriodoForm()
+    elif tab == TAB_STATI:
+        context["stati_tipo"] = tipo.stati.all().order_by("livello", "denominazione")
+        # Default sensato per il prossimo stato custom: livello superiore
+        # all'attuale massimo (cosi' compare in fondo nella sort).
+        max_livello = max(
+            (s.livello for s in context["stati_tipo"]), default=0,
+        )
+        context["nuovo_stato_form"] = StatoAdempimentoTipoForm(
+            initial={"livello": min(100, max_livello + 10), "lavorabile": True},
+        )
     elif tab == TAB_CHECKLIST:
         context["steps"] = tipo.checklist_steps.all().order_by("ordine")
         context["nuovo_step_form"] = ChecklistStepForm(
@@ -211,6 +224,76 @@ def step_delete(request, pk: int, sid: int):
     ).delete()
     messages.success(request, "Step rimosso.")
     return _redirect_tab(pk, TAB_CHECKLIST)
+
+
+# ---------------------------------------------------------------------------
+# Stati adempimento (per tipo)
+# ---------------------------------------------------------------------------
+
+@staff_member_required
+@require_POST
+def stato_create(request, pk: int):
+    """Aggiunge uno stato custom (non predefinito) al tipo."""
+    tipo = get_object_or_404(TipoAdempimentoCatalogo, pk=pk)
+    form = StatoAdempimentoTipoForm(request.POST)
+    if form.is_valid():
+        stato = form.save(commit=False)
+        stato.tipo_adempimento = tipo
+        stato.e_predefinito = False
+        try:
+            stato.save()
+        except IntegrityError:
+            messages.error(
+                request,
+                f"Esiste già uno stato con codice '{stato.codice}' su questo tipo.",
+            )
+        else:
+            messages.success(request, f"Stato '{stato.denominazione}' aggiunto.")
+    else:
+        _flash_form_errors(request, form)
+    return _redirect_tab(pk, TAB_STATI)
+
+
+@staff_member_required
+@require_POST
+def stato_delete(request, pk: int, sid: int):
+    """Elimina uno stato custom. Gli stati `e_predefinito=True` sono protetti."""
+    stato = get_object_or_404(
+        StatoAdempimentoTipo, pk=sid, tipo_adempimento_id=pk,
+    )
+    if stato.e_predefinito:
+        messages.error(
+            request,
+            "Non si possono eliminare gli stati predefiniti. "
+            "Per nasconderli, disattivali con il flag 'attivo'.",
+        )
+        return _redirect_tab(pk, TAB_STATI)
+    if stato.tipo_adempimento.adempimenti.filter(stato=stato.codice).exists():
+        messages.error(
+            request,
+            f"Non posso eliminare '{stato.denominazione}': ci sono adempimenti "
+            "che hanno ancora questo stato. Cambia il loro stato prima.",
+        )
+        return _redirect_tab(pk, TAB_STATI)
+    stato.delete()
+    messages.success(request, "Stato rimosso.")
+    return _redirect_tab(pk, TAB_STATI)
+
+
+@staff_member_required
+@require_POST
+def stato_toggle_attivo(request, pk: int, sid: int):
+    """Attiva/disattiva uno stato senza eliminarlo (utile per i predefiniti)."""
+    stato = get_object_or_404(
+        StatoAdempimentoTipo, pk=sid, tipo_adempimento_id=pk,
+    )
+    stato.attivo = not stato.attivo
+    stato.save(update_fields=["attivo"])
+    messages.success(
+        request,
+        f"Stato '{stato.denominazione}' {'attivato' if stato.attivo else 'disattivato'}.",
+    )
+    return _redirect_tab(pk, TAB_STATI)
 
 
 # ---------------------------------------------------------------------------

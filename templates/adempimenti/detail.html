@@ -22,7 +22,7 @@
             <dt class="col-span-1 text-slate-500">Scadenza</dt><dd class="col-span-2 tabular-nums">{{ adempimento.data_scadenza|date:"d/m/Y"|default:"—" }}</dd>
             <dt class="col-span-1 text-slate-500">Esecutore</dt><dd class="col-span-2">{{ adempimento.responsabile|default:"—" }}</dd>
             <dt class="col-span-1 text-slate-500">Stato</dt>
-            <dd class="col-span-2">{% include "adempimenti/_stato_badge.html" with stato=adempimento.stato %}</dd>
+            <dd class="col-span-2">{% include "adempimenti/_stato_badge.html" with stato=adempimento.stato tipo_id=adempimento.tipo_id %}</dd>
         </dl>
     </div>
 
