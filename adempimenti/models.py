@@ -134,14 +134,19 @@ class CampoCondizione(models.TextChoices):
     SOSTITUTO_IMPOSTA = "sostituto_imposta", "Sostituto d'imposta"
     ISCRITTO_CCIAA = "iscritto_cciaa", "Iscritto CCIAA"
     CONTABILITA = "contabilita", "Contabilità (interna/esterna)"
-    CATEGORIA_PROFESSIONE = "categoria_professione", "Categoria professione"
+    CATEGORIA_PROFESSIONE = "categoria_professione", "Categoria professione (legacy)"
+    CATEGORIE = "categorie", "Categorie (tag)"
 
 
 class OperatoreRegola(models.TextChoices):
     UGUALE = "uguale", "Uguale a"
+    DIVERSO_DA = "diverso_da", "Diverso da"
     IN_LISTA = "in_lista", "In lista (valori separati da virgola)"
+    NON_IN_LISTA = "non_in_lista", "Non in lista (valori separati da virgola)"
     VERO = "vero", "Vero (campo booleano)"
     FALSO = "falso", "Falso (campo booleano)"
+    HA_CATEGORIA = "ha_categoria", "Ha categoria (slug)"
+    NON_HA_CATEGORIA = "non_ha_categoria", "Non ha categoria (slug)"
 
 
 class RegolaApplicabilita(models.Model):
@@ -176,6 +181,13 @@ class RegolaApplicabilita(models.Model):
         )
 
     def valuta(self, anagrafica) -> bool:
+        # Operatori basati sulle categorie (M2M): leggono dalla relazione,
+        # non da un singolo campo scalare.
+        if self.operatore == OperatoreRegola.HA_CATEGORIA:
+            return self._ha_categoria(anagrafica, self.valore.strip())
+        if self.operatore == OperatoreRegola.NON_HA_CATEGORIA:
+            return not self._ha_categoria(anagrafica, self.valore.strip())
+
         val_cliente = self._leggi_campo(anagrafica)
         if self.operatore == OperatoreRegola.VERO:
             return bool(val_cliente)
@@ -183,10 +195,42 @@ class RegolaApplicabilita(models.Model):
             return not bool(val_cliente)
         if self.operatore == OperatoreRegola.UGUALE:
             return str(val_cliente) == self.valore.strip()
+        if self.operatore == OperatoreRegola.DIVERSO_DA:
+            return str(val_cliente) != self.valore.strip()
         if self.operatore == OperatoreRegola.IN_LISTA:
             lista = [v.strip() for v in self.valore.split(",")]
             return str(val_cliente) in lista
+        if self.operatore == OperatoreRegola.NON_IN_LISTA:
+            lista = [v.strip() for v in self.valore.split(",")]
+            return str(val_cliente) not in lista
         return False
+
+    @staticmethod
+    def _ha_categoria(anagrafica, slug: str) -> bool:
+        if not slug:
+            return False
+        # Anagrafica fittizia (matrice profili): espone gli slug come
+        # iterable in `_categorie_slugs` per evitare i vincoli del manager M2M
+        # su istanze non salvate.
+        slugs = getattr(anagrafica, "_categorie_slugs", None)
+        if slugs is not None:
+            try:
+                return slug in set(slugs)
+            except TypeError:
+                return False
+        cats = getattr(anagrafica, "categorie", None)
+        if cats is None:
+            return False
+        if hasattr(cats, "filter"):
+            try:
+                return cats.filter(slug=slug).exists()
+            except ValueError:
+                # Istanza senza pk: nessuna categoria reale.
+                return False
+        try:
+            return slug in set(cats)
+        except TypeError:
+            return False
 
     def _leggi_campo(self, anagrafica):
         mapping = {
@@ -226,8 +270,23 @@ def tipi_applicabili(anagrafica) -> list[TipoAdempimentoCatalogo]:
 class StatoAdempimento(models.TextChoices):
     DA_FARE = "da_fare", "Da fare"
     IN_CORSO = "in_corso", "In corso"
-    CONTROLLATO = "controllato", "Controllato"
+    CHIUSA = "chiusa", "Chiusa (predisposta)"
     INVIATO = "inviato", "Inviato"
+    FANNO_LORO = "fanno_loro", "Fanno loro"
+    NO_DATI = "no_dati", "No dati"
+
+
+# Stati che NON contano nel "lavoro residuo" dello studio.
+STATI_LAVORABILI = {
+    StatoAdempimento.DA_FARE,
+    StatoAdempimento.IN_CORSO,
+    StatoAdempimento.CHIUSA,
+}
+STATI_NON_LAVORABILI = {
+    StatoAdempimento.INVIATO,
+    StatoAdempimento.FANNO_LORO,
+    StatoAdempimento.NO_DATI,
+}
 
 
 class Adempimento(models.Model):
@@ -265,6 +324,11 @@ class Adempimento(models.Model):
         choices=StatoAdempimento.choices,
         default=StatoAdempimento.DA_FARE,
         db_index=True,
+    )
+    data_invio = models.DateField(null=True, blank=True)
+    protocollo_invio = models.CharField(
+        max_length=40, blank=True,
+        help_text="Numero di protocollo telematico restituito dall'invio.",
     )
     responsabile = models.ForeignKey(
         settings.AUTH_USER_MODEL,

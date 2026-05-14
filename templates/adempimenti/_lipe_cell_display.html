@@ -1,0 +1,22 @@
+{% load anagrafica_extras %}
+{% comment %}
+Cella in modalità display (LIPE). Click → entra in modalità edit via HTMX.
+Parametri: `r` (Adempimento), `field` (uno fra: stato, data_invio, protocollo_invio, note).
+{% endcomment %}
+<td class="px-3 group cursor-pointer hover:bg-amber-50 dark:hover:bg-amber-950/30"
+    hx-get="{% url 'adempimenti:lipe_inline_edit_form' r.pk field %}"
+    hx-trigger="click"
+    hx-target="this"
+    hx-swap="outerHTML"
+    title="Clic per modificare">
+  {% if field == "stato" %}
+    {% include "adempimenti/_stato_badge.html" with stato=r.stato %}
+  {% elif field == "data_invio" %}
+    <span class="tabular-nums text-xs">{{ r.data_invio|date:"d/m/Y"|default:"—" }}</span>
+  {% elif field == "protocollo_invio" %}
+    <span class="font-mono text-xs">{{ r.protocollo_invio|default:"—" }}</span>
+  {% else %}
+    <span class="text-xs">{% with v=r|get_attr:field %}{{ v|default:"—" }}{% endwith %}</span>
+  {% endif %}
+  <span aria-hidden="true" class="ml-1 opacity-0 group-hover:opacity-60 text-[10px]">✎</span>
+</td>

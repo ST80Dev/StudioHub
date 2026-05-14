@@ -19,6 +19,7 @@ from anagrafica.models import (
 KIND_ENUM = "enum"
 KIND_BOOL = "bool"
 KIND_TEXT = "text"
+KIND_TAGS = "tags"
 
 
 CAMPI_INFO = {
@@ -53,8 +54,13 @@ CAMPI_INFO = {
         "choices": [],
     },
     "categoria_professione": {
-        "label": "Categoria professione",
+        "label": "Categoria professione (legacy)",
         "kind": KIND_TEXT,
+        "choices": [],
+    },
+    "categorie": {
+        "label": "Categorie (tag)",
+        "kind": KIND_TAGS,
         "choices": [],
     },
 }
@@ -218,6 +224,7 @@ CASISTICHE_TIPICHE = [
             sostituto_imposta=False,
             iscritto_cciaa=False,
             categoria_professione="sanitaria",
+            categorie=["sanitaria-esente"],
         ),
     },
     {
