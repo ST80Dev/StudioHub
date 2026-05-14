@@ -19,6 +19,7 @@ from anagrafica.models import (
     RuoloReferenteStudio,
 )
 
+from .columns import get_columns_for_tipo
 from .models import (
     Adempimento,
     STATI_LAVORABILI,
@@ -346,6 +347,57 @@ def lista_lipe(request):
     return render(request, template, context)
 
 
+def _apply_column_filter(qs, code: str, raw: str):
+    """Applica un filtro sul queryset Adempimento per il codice colonna dato.
+
+    Whitelist dei codici supportati. Codici sconosciuti sono no-op.
+    Per i campi a choices, valida `raw` contro i valori ammessi.
+    """
+    if code == "cliente":
+        return qs.filter(anagrafica__denominazione__icontains=raw)
+    if code == "codice_interno":
+        return qs.filter(anagrafica__codice_interno__icontains=raw)
+    if code == "codice_multi":
+        return qs.filter(anagrafica__codice_multi__icontains=raw)
+    if code == "codice_fiscale":
+        return qs.filter(anagrafica__codice_fiscale__icontains=raw)
+    if code == "partita_iva":
+        return qs.filter(anagrafica__partita_iva__icontains=raw)
+    if code == "tipo_soggetto":
+        if raw in _choices_labels.get_values("tipo_soggetto", include_inactive=True):
+            return qs.filter(anagrafica__tipo_soggetto=raw)
+        return qs
+    if code == "regime_contabile":
+        if raw in _choices_labels.get_values("regime_contabile", include_inactive=True):
+            return qs.filter(anagrafica__regime_contabile=raw)
+        return qs
+    if code == "tipo_contabilita":
+        if raw in _choices_labels.get_values("contabilita", include_inactive=True):
+            return qs.filter(anagrafica__contabilita=raw)
+        return qs
+    if code == "periodicita_iva":
+        if raw in _choices_labels.get_values("periodicita_iva", include_inactive=True):
+            return qs.filter(anagrafica__periodicita_iva=raw)
+        return qs
+    if code == "referente_contab":
+        return qs.filter(
+            anagrafica__referenti_studio__ruolo=RuoloReferenteStudio.ADDETTO_CONTABILITA,
+            anagrafica__referenti_studio__utente__last_name__icontains=raw,
+        ).distinct()
+    if code == "referente_consul":
+        return qs.filter(
+            anagrafica__referenti_studio__ruolo=RuoloReferenteStudio.RESPONSABILE_CONSULENZA,
+            anagrafica__referenti_studio__utente__last_name__icontains=raw,
+        ).distinct()
+    if code == "stato":
+        if raw in StatoAdempimento.values:
+            return qs.filter(stato=raw)
+        return qs
+    if code == "note":
+        return qs.filter(note__icontains=raw)
+    return qs
+
+
 def _render_lipe_anno(request, tipo, anno):
     """Vista aggregata anno intero: 1 riga per cliente, 4 celle Q1..Q4.
 
@@ -355,34 +407,60 @@ def _render_lipe_anno(request, tipo, anno):
     quel trimestre non risultava applicabile o non e' ancora stata generata
     la riga. Cliccando una cella si va al dettaglio del singolo periodo per
     poterla editare.
+
+    Le colonne anagrafiche mostrate prima delle 4 celle Q1..Q4 sono guidate
+    dal sistema standard (vedi `adempimenti.columns`). Le colonne per-periodo
+    (`stato`, `note`) sono escluse in questa vista aggregata.
     """
+    from django.db.models import Prefetch
+    from anagrafica.models import AnagraficaReferenteStudio
+
+    # Referenti dello studio attivi nell'anno: prefetch filtrato.
+    refs_qs = (
+        AnagraficaReferenteStudio.objects
+        .filter(
+            data_inizio__lte=date(anno, 12, 31),
+        )
+        .filter(
+            Q(data_fine__isnull=True) | Q(data_fine__gte=date(anno, 1, 1))
+        )
+        .select_related("utente")
+        .order_by("ruolo", "-principale", "data_inizio")
+    )
+
     base_qs = (
         Adempimento.objects.filter(
             is_deleted=False, tipo=tipo, anno_fiscale=anno,
         )
         .select_related("anagrafica", "responsabile")
+        .prefetch_related(
+            Prefetch("anagrafica__referenti_studio", queryset=refs_qs)
+        )
         .order_by("anagrafica__denominazione", "periodo")
     )
 
-    # Filtri sulle caratteristiche dell'anagrafica (gli stessi della vista
-    # per periodo). Niente filtro stato qui: una "riga" annuale aggrega 4
-    # potenziali stati, il filtro stato singolo non e' semanticamente chiaro.
+    # Colonne standard configurate per la vista anno (sempre senza per-periodo).
+    columns = get_columns_for_tipo(tipo, vista="anno", exclude_per_period=True)
+
+    # Filtri applicati dinamicamente in base alle colonne attive.
+    # Niente filtro stato qui: una riga annuale aggrega 4 potenziali stati.
     qs = base_qs
-    f_denom = (request.GET.get("f_denominazione") or "").strip()
-    if f_denom:
-        qs = qs.filter(anagrafica__denominazione__icontains=f_denom)
-    f_codice = (request.GET.get("f_codice") or "").strip()
-    if f_codice:
-        qs = qs.filter(anagrafica__codice_interno__icontains=f_codice)
-    f_contab = request.GET.get("f_contab") or ""
-    if f_contab in _choices_labels.get_values("contabilita", include_inactive=True):
-        qs = qs.filter(anagrafica__contabilita=f_contab)
-    f_regime = request.GET.get("f_regime") or ""
-    if f_regime in _choices_labels.get_values("regime_contabile", include_inactive=True):
-        qs = qs.filter(anagrafica__regime_contabile=f_regime)
-    f_iva = request.GET.get("f_iva") or ""
-    if f_iva in _choices_labels.get_values("periodicita_iva", include_inactive=True):
-        qs = qs.filter(anagrafica__periodicita_iva=f_iva)
+    filtri_attivi: dict[str, str] = {}
+    for col in columns:
+        if not col.filter_param:
+            continue
+        raw = (request.GET.get(col.filter_param) or "").strip()
+        if not raw:
+            continue
+        filtri_attivi[col.filter_param] = raw
+        qs = _apply_column_filter(qs, col.code, raw)
+
+    # Sort whitelist costruita dalle colonne attive (campi sort_field disponibili).
+    sortable = {c.sort_field for c in columns if c.sort_field}
+    sort_raw = (request.GET.get("sort") or "").strip()
+    sort_field = sort_raw.lstrip("-")
+    if sort_field in sortable:
+        qs = qs.order_by(sort_raw, "anagrafica__denominazione", "periodo")
 
     # Aggrega per anagrafica: { anagrafica_id: {"anag": <Anagrafica>,
     #                                            "righe": {1: <Adempimento>, 2: ..., 3: ..., 4: ...}}}
@@ -431,16 +509,9 @@ def _render_lipe_anno(request, tipo, anno):
             "page": page,
             "page_obj": page,
             "clienti_aggregati": page.object_list,
-            # filtri
-            "f_denominazione": f_denom,
-            "f_codice": f_codice,
-            "f_contab": f_contab,
-            "f_regime": f_regime,
-            "f_iva": f_iva,
-            # opzioni dei select
-            "regimi": _choices_labels.get_choices("regime_contabile"),
-            "periodicita": _choices_labels.get_choices("periodicita_iva"),
-            "contabilita_choices": _choices_labels.get_choices("contabilita"),
+            # nuovo sistema colonne
+            "columns": columns,
+            "sort": sort_raw,
             # totali
             "totali": totali,
             "totale_lavorabile": totale_lavorabile,

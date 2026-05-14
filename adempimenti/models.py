@@ -462,3 +462,56 @@ class StepCompletato(models.Model):
     def __str__(self) -> str:
         mark = "V" if self.completato else " "
         return f"[{mark}] {self.step.denominazione} — {self.adempimento}"
+
+
+# ---------------------------------------------------------------------------
+# Configurazione colonne per le tabelle adempimenti (vedi `columns.py`)
+# ---------------------------------------------------------------------------
+
+class VistaAdempimentoColonne(models.Model):
+    """Configura quali colonne mostrare per un `TipoAdempimentoCatalogo`.
+
+    Una configurazione per coppia (tipo, vista). Se manca, le tabelle ricadono
+    sul set di default definito in `adempimenti.columns.DEFAULT_COLUMN_CODES`.
+
+    `colonne_codici` e' una lista ordinata di codici colonna (es.
+    ["cliente", "codice_fiscale", "stato", "note"]). I codici sconosciuti
+    vengono ignorati a runtime, quindi la configurazione e' tollerante a
+    refactor delle colonne disponibili.
+    """
+
+    class Vista(models.TextChoices):
+        SINGOLO = "singolo", "Singolo periodo"
+        ANNO = "anno", "Anno aggregato"
+
+    tipo = models.ForeignKey(
+        TipoAdempimentoCatalogo,
+        on_delete=models.CASCADE,
+        related_name="viste_colonne",
+    )
+    vista = models.CharField(
+        max_length=10,
+        choices=Vista.choices,
+        default=Vista.SINGOLO,
+    )
+    colonne_codici = models.JSONField(
+        default=list,
+        help_text=(
+            "Lista ordinata di codici colonna. Vedi "
+            "`adempimenti.columns.STANDARD_COLUMNS` per i codici disponibili."
+        ),
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Configurazione colonne tabella"
+        verbose_name_plural = "Configurazioni colonne tabelle"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tipo", "vista"],
+                name="uniq_vista_colonne_per_tipo",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"Colonne {self.get_vista_display()} — {self.tipo}"

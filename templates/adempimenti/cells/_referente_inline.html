@@ -1,0 +1,19 @@
+{% load adempimenti_extras %}
+{% comment %}
+Mostra i referenti dello studio per un'anagrafica nel ruolo dato, validi
+nell'anno fornito.
+
+Parametri:
+- `anag`: istanza `Anagrafica` (con `referenti_studio` idealmente prefetched).
+- `ruolo`: codice `RuoloReferenteStudio` ('addetto_contabilita' / 'responsabile_consulenza').
+- `anno` (opzionale): anno fiscale; se None usa solo i referenti senza data_fine.
+{% endcomment %}
+{% with referenti=anag|referenti_studio:ruolo|attivi_in_anno:anno %}
+    {% if referenti %}
+        <span title="{% for r in referenti %}{{ r.utente.get_full_name|default:r.utente.username }}{% if not forloop.last %} · {% endif %}{% endfor %}">
+            {% for r in referenti %}{{ r.utente|iniziali_utente }}{% if not forloop.last %} · {% endif %}{% endfor %}
+        </span>
+    {% else %}
+        <span class="text-slate-300">—</span>
+    {% endif %}
+{% endwith %}

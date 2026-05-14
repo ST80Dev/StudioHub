@@ -1,0 +1,48 @@
+{% load anagrafica_extras %}
+{% comment %}
+Rendering di una cella standard di tabella adempimenti.
+
+Parametri attesi:
+- `column`: `ColumnSpec` (espone `code`, `css_td`, ...).
+- `record`: istanza `Adempimento` OR un dict con chiave `anag` (vista anno).
+  - Se `record.anag` esiste, usato per le colonne anagrafiche (vista aggregata).
+  - Altrimenti si accede a `record.anagrafica` (vista per-periodo).
+- `aggregato` (opzionale): True se la vista e' aggregata (anno).
+
+Nota: questo dispatcher tiene il sistema "leggero" — un singolo partial con
+if/elif per codice. Se in futuro una cella diventa molto complessa, si puo'
+estrarre in un sotto-partial dedicato.
+{% endcomment %}
+{% with anag=record.anag|default:record.anagrafica %}
+<td class="{{ column.css_td }}">
+    {% if column.code == "cliente" %}
+        <a href="{{ anag.get_absolute_url }}" class="font-medium hover:underline">{{ anag.denominazione }}</a>
+    {% elif column.code == "codice_interno" %}
+        {{ anag.codice_interno|default:"—" }}
+    {% elif column.code == "codice_multi" %}
+        {{ anag.codice_multi|default:"—" }}
+    {% elif column.code == "codice_fiscale" %}
+        {{ anag.codice_fiscale|default:"—" }}
+    {% elif column.code == "partita_iva" %}
+        {{ anag.partita_iva|default:"—" }}
+    {% elif column.code == "tipo_soggetto" %}
+        <span title="{{ anag.tipo_soggetto|label_for:'tipo_soggetto' }}">{{ anag.tipo_soggetto|micro_label:"tipo_soggetto" }}</span>
+    {% elif column.code == "regime_contabile" %}
+        <span title="{{ anag.regime_contabile|label_for:'regime_contabile' }}">{{ anag.regime_contabile|micro_label:"regime_contabile" }}</span>
+    {% elif column.code == "tipo_contabilita" %}
+        <span title="{{ anag.contabilita|label_for:'contabilita' }}">{{ anag.contabilita|micro_label:"contabilita" }}</span>
+    {% elif column.code == "periodicita_iva" %}
+        <span title="{{ anag.periodicita_iva|label_for:'periodicita_iva' }}">{{ anag.periodicita_iva|micro_label:"periodicita_iva" }}</span>
+    {% elif column.code == "referente_contab" %}
+        {% include "adempimenti/cells/_referente_inline.html" with anag=anag ruolo="addetto_contabilita" anno=anno %}
+    {% elif column.code == "referente_consul" %}
+        {% include "adempimenti/cells/_referente_inline.html" with anag=anag ruolo="responsabile_consulenza" anno=anno %}
+    {% elif column.code == "stato" %}
+        {% if record.stato %}{% include "adempimenti/_stato_badge.html" with stato=record.stato %}{% else %}<span class="text-slate-300">—</span>{% endif %}
+    {% elif column.code == "note" %}
+        {% include "adempimenti/cells/_note_inline.html" with record=record %}
+    {% else %}
+        <span class="text-slate-300">—</span>
+    {% endif %}
+</td>
+{% endwith %}
