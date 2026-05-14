@@ -46,7 +46,7 @@
         {% if f_incompleto == '1' %}✓ {% endif %}Da completare ({{ n_incomplete }})
     </a>
     {% endif %}
-    {% if q or f_codice or f_denominazione or f_cf or f_piva or f_tipo or f_stato or f_regime or f_iva or f_incompleto or sort != "denominazione" %}
+    {% if q or f_codice or f_denominazione or f_cf or f_piva or f_tipo or f_stato or f_regime or f_iva or f_contab or f_incompleto or sort != "denominazione" %}
         <a href="{% url 'anagrafica:list' %}" class="text-xs text-slate-500 hover:underline">Azzera filtri</a>
     {% endif %}
     <span class="ml-auto text-[11px] text-slate-400">
@@ -131,6 +131,7 @@
                     {% include "anagrafica/_sort_header.html" with label="P.IVA" field="partita_iva" %}
                     {% include "anagrafica/_sort_header.html" with label="Regime" field="regime_contabile" %}
                     {% include "anagrafica/_sort_header.html" with label="IVA" field="periodicita_iva" %}
+                    {% include "anagrafica/_sort_header.html" with label="Contab." field="contabilita" %}
                     {% include "anagrafica/_sort_header.html" with label="Stato" field="stato" %}
                     <th class="px-3"></th>
                 </tr>
@@ -157,6 +158,12 @@
                         <select form="filters-form" name="f_iva" onchange="this.form.submit()" class="w-full rounded border-slate-300 px-1 py-0.5 text-xs dark:bg-slate-800 dark:border-slate-700">
                             <option value="">tutti</option>
                             {% for val, lbl in periodicita %}<option value="{{ val }}" {% if f_iva == val %}selected{% endif %}>{{ lbl }}</option>{% endfor %}
+                        </select>
+                    </th>
+                    <th class="px-1 py-1">
+                        <select form="filters-form" name="f_contab" onchange="this.form.submit()" class="w-full rounded border-slate-300 px-1 py-0.5 text-xs dark:bg-slate-800 dark:border-slate-700">
+                            <option value="">tutti</option>
+                            {% for val, lbl in contabilita_choices %}<option value="{{ val }}" {% if f_contab == val %}selected{% endif %}>{{ lbl }}</option>{% endfor %}
                         </select>
                     </th>
                     <th class="px-1 py-1">
