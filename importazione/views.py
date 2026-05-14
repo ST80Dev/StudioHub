@@ -79,19 +79,35 @@ def session_create(request):
                 fonte = form.cleaned_data.get("fonte_sessione")
                 if fonte:
                     fonte_map = fonte.column_mapping or {}
-                    sessione.column_mapping = {
-                        col: fonte_map[col]
-                        for col in result.columns
-                        if col in fonte_map and fonte_map[col]
-                    }
-                    n_clonati = len(sessione.column_mapping)
-                    n_orfani = len(fonte_map) - n_clonati
+                    cloned: dict[str, str] = {}
+                    scartati: list[tuple[str, str]] = []
+                    for col in result.columns:
+                        target = fonte_map.get(col)
+                        if not target:
+                            continue
+                        # `is_valid_target` accetta anche `extra:*` arbitrari:
+                        # qui scartiamo solo i target con formato non valido
+                        # (es. campo Anagrafica rimosso dal catalogo).
+                        if is_valid_target(target):
+                            cloned[col] = target
+                        else:
+                            scartati.append((col, target))
+                    sessione.column_mapping = cloned
+                    n_clonati = len(cloned)
+                    n_orfani = sum(1 for c in fonte_map if c not in result.columns)
                     messages.info(
                         request,
                         f"Mapping clonato da '{fonte.nome}': "
                         f"{n_clonati} colonne riprese, "
                         f"{n_orfani} non presenti in questo file.",
                     )
+                    if scartati:
+                        messages.warning(
+                            request,
+                            "Target non piu' validi scartati dal clone: "
+                            + ", ".join(f"{c} -> {t}" for c, t in scartati[:5])
+                            + (" ..." if len(scartati) > 5 else "")
+                        )
                 else:
                     sessione.column_mapping = autodetect_mapping(result.columns)
                 sessione.riepilogo = {
