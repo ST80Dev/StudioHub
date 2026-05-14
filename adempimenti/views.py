@@ -142,8 +142,8 @@ def dettaglio_adempimento(request, pk: int):
         {
             "adempimento": adempimento,
             "steps": steps,
-            "addetti": adempimento.addetti_contabilita_cliente,
-            "consulenti": adempimento.responsabili_consulenza_cliente,
+            "addetti": adempimento.referenti_contabilita_cliente,
+            "consulenti": adempimento.referenti_consulenza_cliente,
         },
     )
 

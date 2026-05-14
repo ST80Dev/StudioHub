@@ -17,4 +17,8 @@ urlpatterns = [
     path("<int:pk>/categorie/cerca/", views.categorie_search, name="categorie_search"),
     path("<int:pk>/categorie/assegna/", views.categorie_assegna, name="categorie_assegna"),
     path("<int:pk>/categorie/<int:cat_pk>/rimuovi/", views.categorie_rimuovi, name="categorie_rimuovi"),
+    # Referenti studio sull'anagrafica
+    path("<int:pk>/referenti/aggiungi/", views.referente_aggiungi, name="referente_aggiungi"),
+    path("<int:pk>/referenti/<int:rid>/chiudi/", views.referente_chiudi, name="referente_chiudi"),
+    path("<int:pk>/referenti/<int:rid>/principale/", views.referente_principale, name="referente_principale"),
 ]

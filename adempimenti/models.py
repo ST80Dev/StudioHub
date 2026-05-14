@@ -524,17 +524,17 @@ class Adempimento(models.Model):
         ).select_related("utente")
 
     @property
-    def addetti_contabilita_cliente(self):
+    def referenti_contabilita_cliente(self):
         from anagrafica.models import RuoloReferenteStudio
         return self.referenti_cliente_nel_periodo(
-            RuoloReferenteStudio.ADDETTO_CONTABILITA
+            RuoloReferenteStudio.REFERENTE_CONTABILITA
         )
 
     @property
-    def responsabili_consulenza_cliente(self):
+    def referenti_consulenza_cliente(self):
         from anagrafica.models import RuoloReferenteStudio
         return self.referenti_cliente_nel_periodo(
-            RuoloReferenteStudio.RESPONSABILE_CONSULENZA
+            RuoloReferenteStudio.REFERENTE_CONSULENZA
         )
 
     @property

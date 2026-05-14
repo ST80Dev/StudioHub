@@ -1,7 +1,10 @@
+from datetime import date
+
 from django.contrib import messages
+from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.core.paginator import Paginator
-from django.db.models import Count, Q
+from django.db.models import Count, Prefetch, Q
 from django.http import HttpResponseBadRequest
 
 from . import choices_labels as _choices_labels
@@ -14,10 +17,12 @@ from django.utils.text import slugify
 from .forms import AnagraficaForm
 from .models import (
     Anagrafica,
+    AnagraficaReferenteStudio,
     Categoria,
     GestioneContabilita,
     PeriodicitaIVA,
     RegimeContabile,
+    RuoloReferenteStudio,
     StatoAnagrafica,
     TipoSoggetto,
 )
@@ -33,7 +38,23 @@ def lista_clienti(request):
     - filtri per colonna come query string GET (whitelistati)
     - ordinamento `?sort=<field>` o `?sort=-<field>` con whitelist server-side
     """
-    queryset = Anagrafica.objects.filter(is_deleted=False)
+    # Prefetch dei referenti attivi (sia contab che consul) per evitare
+    # N+1 sulla tabella elenco clienti.
+    referenti_attivi_qs = (
+        AnagraficaReferenteStudio.objects.filter(data_fine__isnull=True)
+        .select_related("utente")
+        .order_by("-principale", "utente__last_name", "utente__first_name")
+    )
+    queryset = (
+        Anagrafica.objects.filter(is_deleted=False)
+        .prefetch_related(
+            Prefetch(
+                "referenti_studio",
+                queryset=referenti_attivi_qs,
+                to_attr="referenti_attivi",
+            )
+        )
+    )
 
     # Ricerca libera generale (resta per retrocompatibilità: dal pulsante "Filtra")
     q = request.GET.get("q", "").strip()
@@ -93,6 +114,22 @@ def lista_clienti(request):
         .count()
     )
 
+    # Filtro per referente di studio (per ruolo). Whitelist su user_id numerico.
+    f_ref_contab = (request.GET.get("f_ref_contab") or "").strip()
+    if f_ref_contab.isdigit():
+        queryset = queryset.filter(
+            referenti_studio__utente_id=int(f_ref_contab),
+            referenti_studio__ruolo=RuoloReferenteStudio.REFERENTE_CONTABILITA,
+            referenti_studio__data_fine__isnull=True,
+        ).distinct()
+    f_ref_consul = (request.GET.get("f_ref_consul") or "").strip()
+    if f_ref_consul.isdigit():
+        queryset = queryset.filter(
+            referenti_studio__utente_id=int(f_ref_consul),
+            referenti_studio__ruolo=RuoloReferenteStudio.REFERENTE_CONSULENZA,
+            referenti_studio__data_fine__isnull=True,
+        ).distinct()
+
     # Ordinamento. Whitelist dei campi sortabili (sicurezza: no order_by
     # su qualsiasi attributo, evita raw SQL injection di lookup esotici).
     SORTABLE = {
@@ -126,6 +163,13 @@ def lista_clienti(request):
         "f_contab": f_contab,
         "f_incompleto": f_incompleto,
         "n_incomplete": n_incomplete,
+        "f_ref_contab": f_ref_contab,
+        "f_ref_consul": f_ref_consul,
+        "utenti_disponibili": get_user_model().objects
+            .filter(is_active=True)
+            .order_by("last_name", "first_name", "username"),
+        "ruolo_contab": RuoloReferenteStudio.REFERENTE_CONTABILITA,
+        "ruolo_consul": RuoloReferenteStudio.REFERENTE_CONSULENZA,
         # back-compat (sidebar/altri callers che ancora usano i nomi vecchi)
         "tipo": f_tipo,
         "stato": f_stato,
@@ -148,20 +192,123 @@ def lista_clienti(request):
     return render(request, template, context)
 
 
+def _referenti_section_context(cliente):
+    """Contesto condiviso fra detail page e fragment HTMX della sezione referenti."""
+    User = get_user_model()
+    attivi = list(
+        cliente.referenti_studio.filter(data_fine__isnull=True)
+        .select_related("utente")
+        .order_by("ruolo", "-principale", "utente__last_name", "utente__first_name")
+    )
+    ref_contab = [r for r in attivi if r.ruolo == RuoloReferenteStudio.REFERENTE_CONTABILITA]
+    ref_consul = [r for r in attivi if r.ruolo == RuoloReferenteStudio.REFERENTE_CONSULENZA]
+    utenti = User.objects.filter(is_active=True).order_by(
+        "last_name", "first_name", "username"
+    )
+    return {
+        "cliente": cliente,
+        "ref_contab": ref_contab,
+        "ref_consul": ref_consul,
+        "utenti_disponibili": utenti,
+        "ruolo_contab": RuoloReferenteStudio.REFERENTE_CONTABILITA,
+        "ruolo_consul": RuoloReferenteStudio.REFERENTE_CONSULENZA,
+    }
+
+
 @login_required
 def dettaglio_cliente(request, pk: int):
     cliente = get_object_or_404(Anagrafica, pk=pk, is_deleted=False)
+    ctx = {
+        "cliente": cliente,
+        "legami": cliente.legami_da.select_related("anagrafica_collegata"),
+        "categorie_assegnate": cliente.categorie.filter(attiva=True),
+    }
+    ctx.update(_referenti_section_context(cliente))
+    return render(request, "anagrafica/detail.html", ctx)
+
+
+@login_required
+@require_POST
+def referente_aggiungi(request, pk: int):
+    cliente = get_object_or_404(Anagrafica, pk=pk, is_deleted=False)
+    User = get_user_model()
+    utente_id = request.POST.get("utente", "")
+    ruolo = request.POST.get("ruolo", "")
+    principale = request.POST.get("principale") == "on"
+
+    if ruolo not in RuoloReferenteStudio.values:
+        return HttpResponseBadRequest("Ruolo non valido.")
+    if not utente_id.isdigit():
+        return HttpResponseBadRequest("Utente non valido.")
+    utente = get_object_or_404(User, pk=int(utente_id), is_active=True)
+
+    # Evita duplicati: stesso utente, stesso ruolo, già attivo per il cliente.
+    gia_attivo = AnagraficaReferenteStudio.objects.filter(
+        anagrafica=cliente,
+        utente=utente,
+        ruolo=ruolo,
+        data_fine__isnull=True,
+    ).exists()
+    if not gia_attivo:
+        if principale:
+            # Se il nuovo è principale, togli il flag agli altri attivi dello stesso ruolo.
+            AnagraficaReferenteStudio.objects.filter(
+                anagrafica=cliente, ruolo=ruolo, data_fine__isnull=True,
+            ).update(principale=False)
+        AnagraficaReferenteStudio.objects.create(
+            anagrafica=cliente,
+            utente=utente,
+            ruolo=ruolo,
+            principale=principale,
+            data_inizio=date.today(),
+        )
+
     return render(
         request,
-        "anagrafica/detail.html",
-        {
-            "cliente": cliente,
-            "referenti_attivi": cliente.referenti_studio.filter(
-                data_fine__isnull=True
-            ).select_related("utente"),
-            "legami": cliente.legami_da.select_related("anagrafica_collegata"),
-            "categorie_assegnate": cliente.categorie.filter(attiva=True),
-        },
+        "anagrafica/_referenti_section.html",
+        _referenti_section_context(cliente),
+    )
+
+
+@login_required
+@require_POST
+def referente_chiudi(request, pk: int, rid: int):
+    cliente = get_object_or_404(Anagrafica, pk=pk, is_deleted=False)
+    ref = get_object_or_404(
+        AnagraficaReferenteStudio, pk=rid, anagrafica=cliente, data_fine__isnull=True
+    )
+    ref.data_fine = date.today()
+    ref.principale = False
+    ref.save(update_fields=["data_fine", "principale"])
+    return render(
+        request,
+        "anagrafica/_referenti_section.html",
+        _referenti_section_context(cliente),
+    )
+
+
+@login_required
+@require_POST
+def referente_principale(request, pk: int, rid: int):
+    """Promuove il referente a `principale` (gli altri attivi dello stesso ruolo
+    perdono il flag). Se è già principale, lo toglie."""
+    cliente = get_object_or_404(Anagrafica, pk=pk, is_deleted=False)
+    ref = get_object_or_404(
+        AnagraficaReferenteStudio, pk=rid, anagrafica=cliente, data_fine__isnull=True
+    )
+    if ref.principale:
+        ref.principale = False
+        ref.save(update_fields=["principale"])
+    else:
+        AnagraficaReferenteStudio.objects.filter(
+            anagrafica=cliente, ruolo=ref.ruolo, data_fine__isnull=True,
+        ).exclude(pk=ref.pk).update(principale=False)
+        ref.principale = True
+        ref.save(update_fields=["principale"])
+    return render(
+        request,
+        "anagrafica/_referenti_section.html",
+        _referenti_section_context(cliente),
     )
 
 

@@ -146,8 +146,8 @@ class Command(BaseCommand):
 
     def _assegna_referenti(self, cli: Anagrafica, utenti):
         for ruolo in (
-            RuoloReferenteStudio.ADDETTO_CONTABILITA,
-            RuoloReferenteStudio.RESPONSABILE_CONSULENZA,
+            RuoloReferenteStudio.REFERENTE_CONTABILITA,
+            RuoloReferenteStudio.REFERENTE_CONSULENZA,
         ):
             utente = random.choice(utenti)
             ReferenteStudioFactory(
