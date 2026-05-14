@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load anagrafica_extras %}
+{% load adempimenti_extras %}
 {% block title %}Liquidazione IVA Trimestrale {{ anno }} Q{{ periodo }} — StudioHub{% endblock %}
 
 {% block content %}
@@ -216,52 +217,21 @@ comunque).
     <div class="overflow-auto rounded-md border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         <table class="sh-table sh-table-sticky-first w-full">
             <thead class="bg-slate-50 dark:bg-slate-800/40">
+                {# Riga 1: titoli colonna sortabili. Le colonne provengono da
+                   `get_columns_for_tipo(tipo, vista='singolo')` — configurabili
+                   da admin (`VistaAdempimentoColonne`). #}
                 <tr class="text-left text-[11px] uppercase tracking-wider text-slate-500">
                     <th class="px-2">
                         <input type="checkbox" id="bulk-check-all"
                                onclick="document.querySelectorAll('.bulk-check').forEach(c => c.checked = this.checked); document.dispatchEvent(new Event('change', {bubbles:true}));">
                     </th>
-                    {% include "anagrafica/_sort_header.html" with label="Cod Multi" field="anagrafica__codice_multi" %}
-                    {% include "anagrafica/_sort_header.html" with label="Cliente" field="anagrafica__denominazione" %}
-                    {% include "anagrafica/_sort_header.html" with label="Contab" field="anagrafica__contabilita" %}
-                    {% include "anagrafica/_sort_header.html" with label="Regime" field="anagrafica__regime_contabile" %}
-                    {% include "anagrafica/_sort_header.html" with label="IVA" field="anagrafica__periodicita_iva" %}
-                    {% include "anagrafica/_sort_header.html" with label="Stato" field="stato" %}
-                    {# Data invio: header nascosto, sort/filtro disponibili via URL #}
-                    <th class="hidden"></th>
-                    {% include "anagrafica/_sort_header.html" with label="N° Fornitura" field="protocollo_invio" %}
+                    {% for col in columns %}{% column_header col %}{% endfor %}
                     <th class="px-3"></th>
                 </tr>
+                {# Riga 2: filtri per colonna (text/select, parametrizzati dalla ColumnSpec). #}
                 <tr class="bg-white dark:bg-slate-900 border-y border-slate-200 dark:border-slate-700">
                     <th class="px-2"></th>
-                    <th class="px-1 py-1"><input form="filters-form" type="text" name="f_multi" value="{{ f_multi }}" placeholder="filtra" class="w-20 rounded border-slate-300 px-1 py-0.5 text-xs dark:bg-slate-800 dark:border-slate-700"></th>
-                    <th class="px-1 py-1"><input form="filters-form" type="text" name="f_denominazione" value="{{ f_denominazione }}" placeholder="filtra" class="w-full rounded border-slate-300 px-1 py-0.5 text-xs dark:bg-slate-800 dark:border-slate-700"></th>
-                    <th class="px-1 py-1">
-                        <select form="filters-form" name="f_contab" onchange="this.form.submit()" class="w-full rounded border-slate-300 px-1 py-0.5 text-xs dark:bg-slate-800 dark:border-slate-700">
-                            <option value="">tutti</option>
-                            {% for val, lbl in contabilita_choices %}<option value="{{ val }}" {% if f_contab == val %}selected{% endif %}>{{ lbl }}</option>{% endfor %}
-                        </select>
-                    </th>
-                    <th class="px-1 py-1">
-                        <select form="filters-form" name="f_regime" onchange="this.form.submit()" class="w-full rounded border-slate-300 px-1 py-0.5 text-xs dark:bg-slate-800 dark:border-slate-700">
-                            <option value="">tutti</option>
-                            {% for val, lbl in regimi %}<option value="{{ val }}" {% if f_regime == val %}selected{% endif %}>{{ lbl }}</option>{% endfor %}
-                        </select>
-                    </th>
-                    <th class="px-1 py-1">
-                        <select form="filters-form" name="f_iva" onchange="this.form.submit()" class="w-full rounded border-slate-300 px-1 py-0.5 text-xs dark:bg-slate-800 dark:border-slate-700">
-                            <option value="">tutti</option>
-                            {% for val, lbl in periodicita %}<option value="{{ val }}" {% if f_iva == val %}selected{% endif %}>{{ lbl }}</option>{% endfor %}
-                        </select>
-                    </th>
-                    <th class="px-1 py-1">
-                        <select form="filters-form" name="f_stato" onchange="this.form.submit()" class="w-full rounded border-slate-300 px-1 py-0.5 text-xs dark:bg-slate-800 dark:border-slate-700">
-                            <option value="">tutti</option>
-                            {% for val, lbl in stati %}<option value="{{ val }}" {% if f_stato == val %}selected{% endif %}>{{ lbl }}</option>{% endfor %}
-                        </select>
-                    </th>
-                    <th class="hidden"></th>
-                    <th class="px-1 py-1"><input form="filters-form" type="text" name="f_protocollo" value="{{ f_protocollo }}" placeholder="filtra" class="w-full rounded border-slate-300 px-1 py-0.5 text-xs dark:bg-slate-800 dark:border-slate-700"></th>
+                    {% for col in columns %}{% column_filter col %}{% endfor %}
                     <th class="px-1 py-1"></th>
                 </tr>
             </thead>

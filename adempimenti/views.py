@@ -171,19 +171,9 @@ def _anni_disponibili():
 PERIODI = [(1, "Q1"), (2, "Q2"), (3, "Q3"), (4, "Q4")]
 
 
-# Whitelist colonne sortabili per la lista LIPE.
-LIPE_SORTABLE = {
-    "anagrafica__denominazione",
-    "anagrafica__codice_interno",
-    "anagrafica__codice_multi",
-    "anagrafica__contabilita",
-    "anagrafica__regime_contabile",
-    "anagrafica__periodicita_iva",
-    "data_scadenza",
-    "stato",
-    "data_invio",
-    "protocollo_invio",
-}
+# Nota: la whitelist dei campi sortabili e' derivata in runtime dalle
+# colonne configurate (`get_columns_for_tipo` → `col.sort_field`). Niente
+# piu' set hardcoded qui.
 
 # Campi modificabili inline + bulk per la vista LIPE.
 # Lo stato e' un select con choices DINAMICHE dal catalogo del tipo (vedi
@@ -252,58 +242,56 @@ def lista_lipe(request):
     if periodo not in (1, 2, 3, 4):
         periodo = 1
 
+    # Colonne dinamiche: configurazione admin (`VistaAdempimentoColonne`)
+    # oppure default. Le colonne dell'anagrafica + quelle per-periodo
+    # (stato/data_invio/protocollo_invio/note) sono entrambe ammesse.
+    from django.db.models import Prefetch
+    from anagrafica.models import AnagraficaReferenteStudio
+    columns = get_columns_for_tipo(tipo, vista="singolo")
+
+    # Prefetch referenti per evitare N+1 sulle colonne referente_contab/
+    # referente_consul. Filtrato sull'anno fiscale corrente.
+    refs_qs = (
+        AnagraficaReferenteStudio.objects
+        .filter(data_inizio__year__lte=anno)
+        .filter(Q(data_fine__isnull=True) | Q(data_fine__year__gte=anno))
+        .select_related("utente")
+        .order_by("-principale", "utente__last_name", "utente__first_name")
+    )
     base_qs = Adempimento.objects.filter(
         is_deleted=False, tipo=tipo, anno_fiscale=anno, periodo=periodo,
-    ).select_related("anagrafica", "responsabile")
+    ).select_related("anagrafica", "responsabile").prefetch_related(
+        Prefetch("anagrafica__referenti_studio", queryset=refs_qs),
+    )
 
     qs = base_qs
 
-    # Filtri colonna (whitelist)
-    f_denom = (request.GET.get("f_denominazione") or "").strip()
-    if f_denom:
-        qs = qs.filter(anagrafica__denominazione__icontains=f_denom)
+    # Filtri colonna: applico via la stessa funzione condivisa con la vista
+    # anno e quella generica. Ciclo SOLO sulle colonne configurate, cosi'
+    # cambiando la VistaAdempimentoColonne i filtri si adattano.
+    active_filters: dict[str, str] = {}
+    for col in columns:
+        if not col.filter_param:
+            continue
+        raw = (request.GET.get(col.filter_param) or "").strip()
+        if not raw:
+            continue
+        active_filters[col.filter_param] = raw
+        qs = _apply_column_filter(qs, col.code, raw)
 
-    f_codice = (request.GET.get("f_codice") or "").strip()
-    if f_codice:
-        qs = qs.filter(anagrafica__codice_interno__icontains=f_codice)
-
-    f_multi = (request.GET.get("f_multi") or "").strip()
-    if f_multi:
-        qs = qs.filter(anagrafica__codice_multi__icontains=f_multi)
-
-    f_contab = request.GET.get("f_contab") or ""
-    if f_contab in _choices_labels.get_values("contabilita", include_inactive=True):
-        qs = qs.filter(anagrafica__contabilita=f_contab)
-
-    f_regime = request.GET.get("f_regime") or ""
-    if f_regime in _choices_labels.get_values("regime_contabile", include_inactive=True):
-        qs = qs.filter(anagrafica__regime_contabile=f_regime)
-
-    f_iva = request.GET.get("f_iva") or ""
-    if f_iva in _choices_labels.get_values("periodicita_iva", include_inactive=True):
-        qs = qs.filter(anagrafica__periodicita_iva=f_iva)
-
-    f_stato = request.GET.get("f_stato") or ""
-    # Validazione contro il catalogo stati del tipo (non piu' enum hardcoded)
+    # Stati del tipo (usati dalla banda totali in alto e dal bulk update).
     stati_tipo = _stati.stati_di_tipo(tipo.id)
-    codici_tipo = {s.codice for s in stati_tipo}
-    if f_stato in codici_tipo:
-        qs = qs.filter(stato=f_stato)
 
-    f_protocollo = (request.GET.get("f_protocollo") or "").strip()
-    if f_protocollo:
-        qs = qs.filter(protocollo_invio__icontains=f_protocollo)
-
-    # Ordinamento
+    # Ordinamento: whitelist derivata dalle colonne configurate.
+    sortable = {c.sort_field for c in columns if c.sort_field}
     sort = request.GET.get("sort", "anagrafica__denominazione")
     sort_field = sort.lstrip("-")
-    if sort_field not in LIPE_SORTABLE:
+    if sort_field not in sortable:
         sort = "anagrafica__denominazione"
         sort_field = "anagrafica__denominazione"
     qs = qs.order_by(sort, "anagrafica__denominazione")
 
     # Totali per stato (sull'intero set non filtrato dell'anno/periodo).
-    # Itera sul catalogo stati del tipo (non piu' enum hardcoded).
     counts_raw = base_qs.values("stato").annotate(n=Count("id"))
     counts = {row["stato"]: row["n"] for row in counts_raw}
     totali = []
@@ -334,6 +322,9 @@ def lista_lipe(request):
     # significa che il profilo fiscale dei clienti cambia spesso e va gestito.
     obsoleti = list(conta_obsoleti(tipo, anno, periodo))
 
+    # Filtro stato (corrente, per evidenziare il pill attivo nella banda).
+    f_stato = request.GET.get("f_stato", "")
+
     context = {
         "tipo": tipo,
         "anno": anno,
@@ -343,20 +334,12 @@ def lista_lipe(request):
         "page": page,
         "page_obj": page,
         "righe": page.object_list,
-        # filtri (per i widget)
-        "f_denominazione": f_denom,
-        "f_codice": f_codice,
-        "f_multi": f_multi,
-        "f_contab": f_contab,
-        "f_regime": f_regime,
-        "f_iva": f_iva,
-        "f_stato": f_stato,
-        "f_protocollo": f_protocollo,
+        # nuovo sistema colonne dinamico
+        "columns": columns,
         # opzioni dei select
         "stati": [(s.codice, s.denominazione) for s in stati_tipo],
-        "regimi": _choices_labels.get_choices("regime_contabile"),
-        "periodicita": _choices_labels.get_choices("periodicita_iva"),
-        "contabilita_choices": _choices_labels.get_choices("contabilita"),
+        # filtri (per la banda totali e bulk)
+        "f_stato": f_stato,
         # sort
         "sort": sort,
         "sort_field": sort_field,
@@ -427,6 +410,8 @@ def _apply_column_filter(qs, code: str, raw: str):
         if raw and StatoAdempimentoTipo.objects.filter(codice=raw).exists():
             return qs.filter(stato=raw)
         return qs
+    if code == "protocollo_invio":
+        return qs.filter(protocollo_invio__icontains=raw)
     if code == "note":
         return qs.filter(note__icontains=raw)
     return qs
