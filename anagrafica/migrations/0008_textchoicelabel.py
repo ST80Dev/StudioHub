@@ -52,14 +52,14 @@ def unseed(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("anagrafica", "0005_tipo_soggetto_blank"),
+        ("anagrafica", "0007_rename_anagrafica_progr_log_idx_anagrafica__anagraf_a1b1c6_idx"),
     ]
 
     operations = [
         migrations.CreateModel(
             name="TextChoiceLabel",
             fields=[
-                ("id", models.BigAutoField(primary_key=True, serialize=False, auto_created=True)),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
                 ("field", models.CharField(
                     max_length=30, db_index=True,
                     choices=[
@@ -69,11 +69,21 @@ class Migration(migrations.Migration):
                         ("periodicita_iva", "Periodicità IVA"),
                         ("contabilita", "Tenuta contabilità"),
                     ],
+                    help_text="Campo dell'anagrafica a cui si applica l'override.",
                 )),
-                ("codice", models.CharField(max_length=30, db_index=True)),
-                ("label", models.CharField(max_length=80)),
+                ("codice", models.CharField(
+                    max_length=30, db_index=True,
+                    help_text="Codice del valore (es. 'PF', 'attivo'). Stabile, non rinominare.",
+                )),
+                ("label", models.CharField(
+                    max_length=80,
+                    help_text="Etichetta mostrata all'utente (modificabile liberamente).",
+                )),
                 ("descrizione", models.CharField(blank=True, max_length=200)),
-                ("ordine", models.PositiveSmallIntegerField(default=0)),
+                ("ordine", models.PositiveSmallIntegerField(
+                    default=0,
+                    help_text="Ordine di visualizzazione nei dropdown (asc).",
+                )),
                 ("updated_at", models.DateTimeField(auto_now=True)),
             ],
             options={
