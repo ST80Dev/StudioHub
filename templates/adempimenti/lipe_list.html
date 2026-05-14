@@ -16,6 +16,29 @@
     </div>
     <div class="flex items-center gap-3">
         {% include "partials/_paginator.html" with page_obj=page_obj %}
+
+        {# Crea / Aggiorna elenco. Stesso endpoint, etichetta diversa in base
+           al fatto che la lista per (anno, periodo) sia gia' popolata. #}
+        <form method="post" action="{% url 'adempimenti:lipe_sincronizza' %}" class="inline-flex">
+            {% csrf_token %}
+            <input type="hidden" name="anno" value="{{ anno }}">
+            <input type="hidden" name="periodo" value="{{ periodo }}">
+            <input type="hidden" name="qs" value="{{ request.GET.urlencode }}">
+            {% if lista_vuota %}
+                <button type="submit"
+                        onclick="return confirm('Creare l\'elenco di {{ tipo.denominazione }} per {{ anno }} Q{{ periodo }} con i clienti applicabili in base alle regole?')"
+                        class="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700">
+                    Crea elenco
+                </button>
+            {% else %}
+                <button type="submit"
+                        title="Aggiunge i clienti che oggi sono applicabili e ancora non hanno una riga. Non tocca le righe esistenti."
+                        class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700">
+                    Aggiorna elenco
+                </button>
+            {% endif %}
+        </form>
+
         <button type="button"
                 onclick="document.getElementById('add-cliente-modal').classList.remove('hidden')"
                 class="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
@@ -53,6 +76,15 @@
             {{ lbl }}
         </a>
         {% endfor %}
+        {# Pillola "Anno": vista aggregata con 1 riga per cliente e 4 celle Q1..Q4.
+           Utile per vedere tutti i trimestri insieme e capire chi e' valido per
+           alcuni trimestri ma non per altri. #}
+        <a href="?anno={{ anno }}&periodo=anno"
+           title="Vista anno intero: 1 riga per cliente con tutti i 4 trimestri"
+           class="px-3 py-1 text-sm border-l border-slate-300 dark:border-slate-700
+                  bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700">
+            Anno
+        </a>
     </div>
     {% if sort %}<input type="hidden" name="sort" value="{{ sort }}">{% endif %}
     <span class="ml-auto text-[11px] text-slate-400">
@@ -76,6 +108,63 @@
     <a href="?anno={{ anno }}&periodo={{ periodo }}" class="text-slate-500 hover:underline">azzera filtro stato</a>
     {% endif %}
 </div>
+
+{# Pannello "Caratteristiche cambiate dopo la generazione".
+
+   Sono righe ancora in lavorazione (DA_FARE / IN_CORSO / CHIUSA) per
+   clienti che, valutati oggi sulle caratteristiche correnti, NON sarebbero
+   applicabili al LIPE. NON significa che il cliente sia cessato come tale:
+   indica solo che il suo profilo fiscale e' cambiato rispetto a quando la
+   riga e' stata generata. L'utente decide manualmente cosa fare (marcare
+   "No dati", "Fanno loro", rimuovere la riga, o lasciar stare se va
+   completata comunque). #}
+{% if obsoleti %}
+<details class="mb-3 rounded-md border border-amber-200 bg-amber-50 dark:border-amber-800/40 dark:bg-amber-950/30" open>
+    <summary class="cursor-pointer px-3 py-2 text-sm">
+        <strong class="text-amber-900 dark:text-amber-100">{{ obsoleti|length }}</strong>
+        <span class="text-amber-900 dark:text-amber-100">caratteristiche cambiate dopo la generazione</span>
+        <span class="ml-2 text-[11px] text-amber-700 dark:text-amber-300">
+            (oggi questi clienti non risulterebbero applicabili; la riga e' stata generata quando lo erano)
+        </span>
+    </summary>
+    <div class="border-t border-amber-200 dark:border-amber-800/40">
+        <table class="w-full text-xs">
+            <thead class="text-left text-[10px] uppercase tracking-wider text-amber-700 dark:text-amber-300">
+                <tr>
+                    <th class="px-3 py-1">Cliente</th>
+                    <th class="px-3 py-1">Periodo</th>
+                    <th class="px-3 py-1">Stato</th>
+                    <th class="px-3 py-1">Regime oggi</th>
+                    <th class="px-3 py-1">IVA oggi</th>
+                    <th class="px-3 py-1 text-right">Azione</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for o in obsoleti %}
+                <tr class="border-t border-amber-200/60 dark:border-amber-800/30">
+                    <td class="px-3 py-1">
+                        <a href="{{ o.anagrafica.get_absolute_url }}" class="hover:underline">{{ o.anagrafica.denominazione }}</a>
+                    </td>
+                    <td class="px-3 py-1">Q{{ o.periodo|default:"—" }}</td>
+                    <td class="px-3 py-1">{% include "adempimenti/_stato_badge.html" with stato=o.stato %}</td>
+                    <td class="px-3 py-1">{{ o.anagrafica.get_regime_contabile_display|default:"—" }}</td>
+                    <td class="px-3 py-1">{{ o.anagrafica.get_periodicita_iva_display|default:"—" }}</td>
+                    <td class="px-3 py-1 text-right">
+                        <form method="post" action="{% url 'adempimenti:lipe_rimuovi_riga' o.pk %}" class="inline">
+                            {% csrf_token %}
+                            <input type="hidden" name="qs" value="{{ request.GET.urlencode }}">
+                            <button type="submit"
+                                    onclick="return confirm('Rimuovere la riga {{ o.anagrafica.denominazione|escapejs }} Q{{ o.periodo }}? La riga sara' marcata come eliminata (soft delete).')"
+                                    class="text-[11px] text-red-700 hover:underline dark:text-red-400">Rimuovi riga</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</details>
+{% endif %}
 
 {# Form bulk wrappa la tabella per condividere i checkbox. #}
 <form method="post" action="{% url 'adempimenti:lipe_bulk_update' %}"

@@ -26,6 +26,7 @@ from .models import (
     TipoAdempimentoCatalogo,
     tipi_applicabili,
 )
+from .services import conta_obsoleti, sincronizza_adempimenti
 
 
 # Codice del tipo "Liquidazione IVA Trimestrale" (seed migration 0006).
@@ -190,6 +191,9 @@ def lista_lipe(request):
 
     Filtra implicitamente per `tipo=liquidazione-iva-trimestrale`. Selettore
     `anno` (default: anno corrente) e `periodo` (Q1..Q4, default Q1).
+
+    Caso speciale: `periodo=anno` -> vista aggregata 1 riga per cliente con
+    4 celle Q1..Q4. Vedi `_render_lipe_anno`.
     """
     tipo = _get_tipo_lipe()
 
@@ -198,8 +202,13 @@ def lista_lipe(request):
         anno = int(request.GET.get("anno") or oggi.year)
     except ValueError:
         anno = oggi.year
+
+    periodo_raw = request.GET.get("periodo") or "1"
+    if periodo_raw == "anno":
+        return _render_lipe_anno(request, tipo, anno)
+
     try:
-        periodo = int(request.GET.get("periodo") or 1)
+        periodo = int(periodo_raw)
     except ValueError:
         periodo = 1
     if periodo not in (1, 2, 3, 4):
@@ -273,6 +282,14 @@ def lista_lipe(request):
     paginator = Paginator(qs, 50)
     page = paginator.get_page(request.GET.get("page"))
 
+    # Stato della lista per il bottone "Crea elenco" / "Aggiorna elenco".
+    lista_vuota = not base_qs.exists()
+
+    # Righe oggi obsolete (cliente non piu' applicabile alle regole) — solo
+    # in stati lavorabili. Lista breve, niente paginazione: se cresce molto
+    # significa che il profilo fiscale dei clienti cambia spesso e va gestito.
+    obsoleti = list(conta_obsoleti(tipo, anno, periodo))
+
     context = {
         "tipo": tipo,
         "anno": anno,
@@ -304,6 +321,9 @@ def lista_lipe(request):
         "totali": totali,
         "totale_lavorabile": totale_lavorabile,
         "totale_complessivo": totale_complessivo,
+        # azioni "Crea/Aggiorna elenco" + segnalazione obsoleti
+        "lista_vuota": lista_vuota,
+        "obsoleti": obsoleti,
     }
     template = (
         "adempimenti/_lipe_rows.html"
@@ -311,6 +331,112 @@ def lista_lipe(request):
         else "adempimenti/lipe_list.html"
     )
     return render(request, template, context)
+
+
+def _render_lipe_anno(request, tipo, anno):
+    """Vista aggregata anno intero: 1 riga per cliente, 4 celle Q1..Q4.
+
+    Mostra ogni cliente che ha almeno una riga in uno dei trimestri
+    dell'anno. Le celle dei trimestri senza riga restano vuote (placeholder
+    "—"), senza far pensare che il cliente sia "cessato": e' solo che per
+    quel trimestre non risultava applicabile o non e' ancora stata generata
+    la riga. Cliccando una cella si va al dettaglio del singolo periodo per
+    poterla editare.
+    """
+    base_qs = (
+        Adempimento.objects.filter(
+            is_deleted=False, tipo=tipo, anno_fiscale=anno,
+        )
+        .select_related("anagrafica", "responsabile")
+        .order_by("anagrafica__denominazione", "periodo")
+    )
+
+    # Filtri sulle caratteristiche dell'anagrafica (gli stessi della vista
+    # per periodo). Niente filtro stato qui: una "riga" annuale aggrega 4
+    # potenziali stati, il filtro stato singolo non e' semanticamente chiaro.
+    qs = base_qs
+    f_denom = (request.GET.get("f_denominazione") or "").strip()
+    if f_denom:
+        qs = qs.filter(anagrafica__denominazione__icontains=f_denom)
+    f_codice = (request.GET.get("f_codice") or "").strip()
+    if f_codice:
+        qs = qs.filter(anagrafica__codice_interno__icontains=f_codice)
+    f_contab = request.GET.get("f_contab") or ""
+    if f_contab in GestioneContabilita.values:
+        qs = qs.filter(anagrafica__contabilita=f_contab)
+    f_regime = request.GET.get("f_regime") or ""
+    if f_regime in RegimeContabile.values:
+        qs = qs.filter(anagrafica__regime_contabile=f_regime)
+    f_iva = request.GET.get("f_iva") or ""
+    if f_iva in PeriodicitaIVA.values:
+        qs = qs.filter(anagrafica__periodicita_iva=f_iva)
+
+    # Aggrega per anagrafica: { anagrafica_id: {"anag": <Anagrafica>,
+    #                                            "righe": {1: <Adempimento>, 2: ..., 3: ..., 4: ...}}}
+    aggregato = {}
+    for r in qs:
+        slot = aggregato.setdefault(
+            r.anagrafica_id,
+            {"anag": r.anagrafica, "righe": {}},
+        )
+        if r.periodo:
+            slot["righe"][r.periodo] = r
+    clienti_aggregati = sorted(
+        aggregato.values(), key=lambda x: x["anag"].denominazione
+    )
+
+    # Totali aggregati: somma per ogni stato su tutti i Q dell'anno.
+    counts = {}
+    for r in base_qs:
+        counts[r.stato] = counts.get(r.stato, 0) + 1
+    totali = []
+    for val, label in StatoAdempimento.choices:
+        totali.append({
+            "value": val,
+            "label": label,
+            "count": counts.get(val, 0),
+            "lavorabile": val in STATI_LAVORABILI,
+        })
+    totale_lavorabile = sum(c["count"] for c in totali if c["lavorabile"])
+    totale_complessivo = sum(c["count"] for c in totali)
+
+    paginator = Paginator(clienti_aggregati, 50)
+    page = paginator.get_page(request.GET.get("page"))
+
+    lista_vuota = not base_qs.exists()
+    # Obsoleti su tutti i periodi dell'anno
+    obsoleti = list(conta_obsoleti(tipo, anno, periodo=None))
+
+    return render(
+        request,
+        "adempimenti/lipe_anno.html",
+        {
+            "tipo": tipo,
+            "anno": anno,
+            "anni": _anni_disponibili(),
+            "periodi": PERIODI,
+            "page": page,
+            "page_obj": page,
+            "clienti_aggregati": page.object_list,
+            # filtri
+            "f_denominazione": f_denom,
+            "f_codice": f_codice,
+            "f_contab": f_contab,
+            "f_regime": f_regime,
+            "f_iva": f_iva,
+            # opzioni dei select
+            "regimi": RegimeContabile.choices,
+            "periodicita": PeriodicitaIVA.choices,
+            "contabilita_choices": GestioneContabilita.choices,
+            # totali
+            "totali": totali,
+            "totale_lavorabile": totale_lavorabile,
+            "totale_complessivo": totale_complessivo,
+            # azioni
+            "lista_vuota": lista_vuota,
+            "obsoleti": obsoleti,
+        },
+    )
 
 
 @login_required
@@ -457,3 +583,68 @@ def lipe_search_clienti(request):
         "adempimenti/_lipe_search_results.html",
         {"risultati": risultati, "q": q},
     )
+
+
+@login_required
+@require_POST
+def lipe_sincronizza(request):
+    """Crea / aggiorna l'elenco LIPE per (anno, periodo).
+
+    Stessa funzione usata dal management command `genera_adempimenti`:
+    aggiunge le righe mancanti per i clienti oggi applicabili (idempotente).
+    Non tocca mai righe esistenti. Mostra un toast con il riepilogo.
+    """
+    tipo = _get_tipo_lipe()
+    try:
+        anno = int(request.POST.get("anno") or 0)
+        # `periodo` opzionale: se vuoto, sincronizza tutti i periodi dell'anno.
+        periodo_raw = request.POST.get("periodo") or ""
+        solo_periodo = int(periodo_raw) if periodo_raw else None
+    except ValueError:
+        return HttpResponseBadRequest("Parametri non validi.")
+
+    if solo_periodo is not None and solo_periodo not in (1, 2, 3, 4):
+        return HttpResponseBadRequest("Periodo non valido.")
+
+    risultato = sincronizza_adempimenti(
+        tipo, anno, solo_periodo=solo_periodo,
+    )
+
+    scope = (
+        f"{anno} Q{solo_periodo}"
+        if solo_periodo is not None
+        else f"tutti i periodi {anno}"
+    )
+    parti = [f"{risultato.creati} aggiunti"]
+    if risultato.gia_esistenti:
+        parti.append(f"{risultato.gia_esistenti} già presenti")
+    if risultato.obsoleti_pks:
+        parti.append(f"{len(risultato.obsoleti_pks)} non più applicabili")
+    messages.success(
+        request, f"Sincronizzazione {scope}: " + ", ".join(parti) + "."
+    )
+
+    # Ritorna alla pagina LIPE preservando anno/periodo (se passato un singolo
+    # periodo, lo si rivede; altrimenti rimane il periodo della query string).
+    qs = request.POST.get("qs", "")
+    return redirect(reverse("adempimenti:lipe") + ("?" + qs if qs else ""))
+
+
+@login_required
+@require_POST
+def lipe_rimuovi_riga(request, pk: int):
+    """Soft-delete di una riga LIPE.
+
+    Usata dal pannello "Non più applicabili" per ripulire l'elenco senza
+    perdere lo storico (la riga resta in DB con is_deleted=True).
+    """
+    riga = get_object_or_404(Adempimento, pk=pk, is_deleted=False)
+    riga.is_deleted = True
+    riga.save(update_fields=["is_deleted", "updated_at"])
+    messages.success(
+        request,
+        f"Riga rimossa: {riga.anagrafica.denominazione} "
+        f"({riga.anno_fiscale} Q{riga.periodo or '—'}).",
+    )
+    qs = request.POST.get("qs", "")
+    return redirect(reverse("adempimenti:lipe") + ("?" + qs if qs else ""))

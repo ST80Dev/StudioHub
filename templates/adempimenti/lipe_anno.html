@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+{% load anagrafica_extras %}
+{% block title %}Liquidazione IVA Trimestrale {{ anno }} — anno intero — StudioHub{% endblock %}
+
+{% block content %}
+<div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+    <div>
+        <div class="text-[11px] uppercase tracking-wider text-slate-500">
+            <a href="{% url 'adempimenti:list' %}" class="hover:underline">Adempimenti</a> /
+        </div>
+        <h1 class="text-lg font-semibold">{{ tipo.denominazione }} · Anno {{ anno }}</h1>
+        <p class="text-xs text-slate-500">
+            {{ totale_complessivo }} righe totali sui 4 trimestri · {{ totale_lavorabile }} ancora da lavorare ·
+            <span class="opacity-70">clic su una cella per andare al trimestre e modificarla</span>
+        </p>
+    </div>
+    <div class="flex items-center gap-3">
+        {% include "partials/_paginator.html" with page_obj=page_obj %}
+
+        {# Aggiorna elenco: sincronizza TUTTI i 4 trimestri dell'anno in un colpo. #}
+        <form method="post" action="{% url 'adempimenti:lipe_sincronizza' %}" class="inline-flex">
+            {% csrf_token %}
+            <input type="hidden" name="anno" value="{{ anno }}">
+            {# periodo vuoto => tutti i periodi dell'anno #}
+            <input type="hidden" name="qs" value="{{ request.GET.urlencode }}">
+            {% if lista_vuota %}
+                <button type="submit"
+                        onclick="return confirm('Creare l\'elenco di {{ tipo.denominazione }} per tutti i trimestri di {{ anno }}?')"
+                        class="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700">
+                    Crea elenco anno
+                </button>
+            {% else %}
+                <button type="submit"
+                        title="Aggiunge per ogni trimestre i clienti oggi applicabili che non hanno ancora una riga. Non tocca le righe esistenti."
+                        class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700">
+                    Aggiorna anno
+                </button>
+            {% endif %}
+        </form>
+    </div>
+</div>
+
+{% if messages %}
+  {% for m in messages %}
+    <div class="mb-3 rounded border px-3 py-2 text-sm
+                {% if m.tags == 'error' %}border-red-200 bg-red-50 text-red-800
+                {% elif m.tags == 'warning' %}border-amber-200 bg-amber-50 text-amber-800
+                {% elif m.tags == 'success' %}border-emerald-200 bg-emerald-50 text-emerald-800
+                {% else %}border-slate-200 bg-slate-50 text-slate-800{% endif %}">{{ m }}</div>
+  {% endfor %}
+{% endif %}
+
+{# Selettore anno + periodo (con pillola "Anno" attiva). #}
+<form method="get" id="filters-form"
+      class="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white p-2 text-sm dark:border-slate-800 dark:bg-slate-900">
+    <label class="text-xs text-slate-500">Anno</label>
+    <select name="anno" onchange="this.form.submit()"
+            class="rounded-md border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-800">
+        {% for y in anni %}
+        <option value="{{ y }}" {% if y == anno %}selected{% endif %}>{{ y }}</option>
+        {% endfor %}
+    </select>
+    <input type="hidden" name="periodo" value="anno">
+    <label class="text-xs text-slate-500 ml-3">Periodo</label>
+    <div class="inline-flex rounded-md border border-slate-300 dark:border-slate-700 overflow-hidden">
+        {% for val, lbl in periodi %}
+        <a href="?anno={{ anno }}&periodo={{ val }}"
+           class="px-3 py-1 text-sm bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700">{{ lbl }}</a>
+        {% endfor %}
+        <a href="?anno={{ anno }}&periodo=anno"
+           class="px-3 py-1 text-sm border-l border-slate-300 dark:border-slate-700 bg-brand-600 text-white">
+            Anno
+        </a>
+    </div>
+    <span class="ml-auto text-[11px] text-slate-400">
+        Filtra per colonna usando i campi sotto le intestazioni; <kbd class="px-1 rounded border">Invio</kbd> applica.
+    </span>
+</form>
+
+{# Banda totali aggregati. #}
+<div class="mb-3 flex flex-wrap items-center gap-2 text-xs">
+    <span class="text-slate-500">Totali {{ anno }} (tutti i 4 trim):</span>
+    {% for t in totali %}
+    <span class="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-0.5 dark:border-slate-700 dark:bg-slate-900 {% if not t.lavorabile %}opacity-70{% endif %}">
+        <span>{{ t.label }}</span>
+        <strong class="tabular-nums">{{ t.count }}</strong>
+    </span>
+    {% endfor %}
+</div>
+
+{% if obsoleti %}
+<details class="mb-3 rounded-md border border-amber-200 bg-amber-50 dark:border-amber-800/40 dark:bg-amber-950/30">
+    <summary class="cursor-pointer px-3 py-2 text-sm">
+        <strong class="text-amber-900 dark:text-amber-100">{{ obsoleti|length }}</strong>
+        <span class="text-amber-900 dark:text-amber-100">caratteristiche cambiate dopo la generazione</span>
+        <span class="ml-2 text-[11px] text-amber-700 dark:text-amber-300">
+            (oggi questi clienti non risulterebbero applicabili in uno o piu' trimestri; la riga e' stata generata quando lo erano — non significa cessazione)
+        </span>
+    </summary>
+    <div class="border-t border-amber-200 dark:border-amber-800/40">
+        <table class="w-full text-xs">
+            <thead class="text-left text-[10px] uppercase tracking-wider text-amber-700 dark:text-amber-300">
+                <tr>
+                    <th class="px-3 py-1">Cliente</th>
+                    <th class="px-3 py-1">Trim</th>
+                    <th class="px-3 py-1">Stato</th>
+                    <th class="px-3 py-1">Regime oggi</th>
+                    <th class="px-3 py-1">IVA oggi</th>
+                    <th class="px-3 py-1 text-right">Azione</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for o in obsoleti %}
+                <tr class="border-t border-amber-200/60 dark:border-amber-800/30">
+                    <td class="px-3 py-1">
+                        <a href="{{ o.anagrafica.get_absolute_url }}" class="hover:underline">{{ o.anagrafica.denominazione }}</a>
+                    </td>
+                    <td class="px-3 py-1">Q{{ o.periodo|default:"—" }}</td>
+                    <td class="px-3 py-1">{% include "adempimenti/_stato_badge.html" with stato=o.stato %}</td>
+                    <td class="px-3 py-1">{{ o.anagrafica.get_regime_contabile_display|default:"—" }}</td>
+                    <td class="px-3 py-1">{{ o.anagrafica.get_periodicita_iva_display|default:"—" }}</td>
+                    <td class="px-3 py-1 text-right">
+                        <form method="post" action="{% url 'adempimenti:lipe_rimuovi_riga' o.pk %}" class="inline">
+                            {% csrf_token %}
+                            <input type="hidden" name="qs" value="{{ request.GET.urlencode }}">
+                            <button type="submit"
+                                    onclick="return confirm('Rimuovere la riga {{ o.anagrafica.denominazione|escapejs }} Q{{ o.periodo }}?')"
+                                    class="text-[11px] text-red-700 hover:underline dark:text-red-400">Rimuovi</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</details>
+{% endif %}
+
+<div class="overflow-auto rounded-md border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+    <table class="sh-table sh-table-sticky-first w-full">
+        <thead class="bg-slate-50 dark:bg-slate-800/40">
+            <tr class="text-left text-[11px] uppercase tracking-wider text-slate-500">
+                <th class="px-3 py-1">Codice</th>
+                <th class="px-3 py-1">Cliente</th>
+                <th class="px-3 py-1">Contab</th>
+                <th class="px-3 py-1">Regime</th>
+                <th class="px-3 py-1">IVA</th>
+                <th class="px-3 py-1 text-center">Q1</th>
+                <th class="px-3 py-1 text-center">Q2</th>
+                <th class="px-3 py-1 text-center">Q3</th>
+                <th class="px-3 py-1 text-center">Q4</th>
+            </tr>
+            <tr class="bg-white dark:bg-slate-900 border-y border-slate-200 dark:border-slate-700">
+                <th class="px-1 py-1"><input form="filters-form" type="text" name="f_codice" value="{{ f_codice }}" placeholder="filtra" class="w-20 rounded border-slate-300 px-1 py-0.5 text-xs dark:bg-slate-800 dark:border-slate-700"></th>
+                <th class="px-1 py-1"><input form="filters-form" type="text" name="f_denominazione" value="{{ f_denominazione }}" placeholder="filtra" class="w-full rounded border-slate-300 px-1 py-0.5 text-xs dark:bg-slate-800 dark:border-slate-700"></th>
+                <th class="px-1 py-1">
+                    <select form="filters-form" name="f_contab" onchange="this.form.submit()" class="w-full rounded border-slate-300 px-1 py-0.5 text-xs dark:bg-slate-800 dark:border-slate-700">
+                        <option value="">tutti</option>
+                        {% for val, lbl in contabilita_choices %}<option value="{{ val }}" {% if f_contab == val %}selected{% endif %}>{{ lbl }}</option>{% endfor %}
+                    </select>
+                </th>
+                <th class="px-1 py-1">
+                    <select form="filters-form" name="f_regime" onchange="this.form.submit()" class="w-full rounded border-slate-300 px-1 py-0.5 text-xs dark:bg-slate-800 dark:border-slate-700">
+                        <option value="">tutti</option>
+                        {% for val, lbl in regimi %}<option value="{{ val }}" {% if f_regime == val %}selected{% endif %}>{{ lbl }}</option>{% endfor %}
+                    </select>
+                </th>
+                <th class="px-1 py-1">
+                    <select form="filters-form" name="f_iva" onchange="this.form.submit()" class="w-full rounded border-slate-300 px-1 py-0.5 text-xs dark:bg-slate-800 dark:border-slate-700">
+                        <option value="">tutti</option>
+                        {% for val, lbl in periodicita %}<option value="{{ val }}" {% if f_iva == val %}selected{% endif %}>{{ lbl }}</option>{% endfor %}
+                    </select>
+                </th>
+                <th class="px-1 py-1"></th>
+                <th class="px-1 py-1"></th>
+                <th class="px-1 py-1"></th>
+                <th class="px-1 py-1"></th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+            {% for c in clienti_aggregati %}
+            <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                <td class="px-3 font-mono text-xs">{{ c.anag.codice_interno }}</td>
+                <td class="px-3">
+                    <a href="{{ c.anag.get_absolute_url }}" class="font-medium hover:underline">{{ c.anag.denominazione }}</a>
+                </td>
+                <td class="px-3 text-xs">{{ c.anag.get_contabilita_display|default:"—" }}</td>
+                <td class="px-3 text-xs">{{ c.anag.get_regime_contabile_display|default:"—" }}</td>
+                <td class="px-3 text-xs">{{ c.anag.get_periodicita_iva_display|default:"—" }}</td>
+                {% for q in "1234" %}
+                <td class="px-2 text-center">
+                    {% with r=c.righe|get_attr:q %}
+                        {% if r %}
+                            <a href="?anno={{ anno }}&periodo={{ q }}&f_denominazione={{ c.anag.denominazione|urlencode }}"
+                               class="block hover:opacity-80"
+                               title="{% if r.protocollo_invio %}Prot. {{ r.protocollo_invio }} · {% endif %}{% if r.data_invio %}Inviato {{ r.data_invio|date:'d/m/Y' }}{% endif %}">
+                                {% include "adempimenti/_stato_badge.html" with stato=r.stato %}
+                            </a>
+                        {% else %}
+                            <span class="text-slate-300" title="Nessuna riga generata per questo trimestre">—</span>
+                        {% endif %}
+                    {% endwith %}
+                </td>
+                {% endfor %}
+            </tr>
+            {% empty %}
+            <tr><td colspan="9" class="px-3 py-8 text-center text-sm text-slate-500">
+                Nessun cliente con righe per {{ anno }}. Genera l'elenco con il bottone in alto, o vai sui singoli trimestri.
+            </td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="mt-3 flex items-center justify-end">
+    {% include "partials/_paginator.html" with page_obj=page_obj %}
+</div>
+{% endblock %}

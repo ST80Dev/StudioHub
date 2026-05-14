@@ -14,6 +14,16 @@ urlpatterns = [
         name="lipe_aggiungi_cliente",
     ),
     path(
+        "liquidazione-iva-trimestrale/sincronizza/",
+        views.lipe_sincronizza,
+        name="lipe_sincronizza",
+    ),
+    path(
+        "liquidazione-iva-trimestrale/<int:pk>/rimuovi/",
+        views.lipe_rimuovi_riga,
+        name="lipe_rimuovi_riga",
+    ),
+    path(
         "liquidazione-iva-trimestrale/cerca-clienti/",
         views.lipe_search_clienti,
         name="lipe_search_clienti",
