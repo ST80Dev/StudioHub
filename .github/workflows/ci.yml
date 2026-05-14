@@ -1,0 +1,41 @@
+name: CI checks
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  django:
+    name: Django checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      DJANGO_SETTINGS_MODULE: studiohub.settings_ci
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Django system check
+        run: python manage.py check
+
+      - name: Migrations consistency check
+        # Fallisce se i modelli sono cambiati senza relativa migration o
+        # se ci sono nodi leaf paralleli (multiple leaf nodes) — il caso
+        # che ha rotto il deploy della #21.
+        run: python manage.py makemigrations --check --dry-run
