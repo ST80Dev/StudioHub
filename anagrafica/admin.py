@@ -100,10 +100,35 @@ class AnagraficaAdmin(admin.ModelAdmin):
 
 @admin.register(Categoria)
 class CategoriaAdmin(admin.ModelAdmin):
-    list_display = ("slug", "denominazione", "attiva", "colore", "created_at")
+    list_display = ("denominazione", "slug", "n_anagrafiche", "attiva", "colore", "created_at")
     list_filter = ("attiva",)
     search_fields = ("slug", "denominazione", "descrizione")
     prepopulated_fields = {"slug": ("denominazione",)}
+    ordering = ("denominazione",)
+    readonly_fields = ("created_at", "n_anagrafiche")
+    fields = (
+        "denominazione",
+        "slug",
+        "colore",
+        "descrizione",
+        "attiva",
+        "n_anagrafiche",
+        "created_at",
+    )
+
+    def get_queryset(self, request):
+        from django.db.models import Count
+        return super().get_queryset(request).annotate(
+            _n_anagrafiche=Count("anagrafiche", distinct=True),
+        )
+
+    def n_anagrafiche(self, obj):
+        """Numero di anagrafiche che usano questo tag.
+        Modificare denominazione/colore/colore propaga automaticamente a
+        tutte le anagrafiche M2M-collegate (relazione FK, non copia)."""
+        return getattr(obj, "_n_anagrafiche", obj.anagrafiche.count())
+    n_anagrafiche.short_description = "Usato da N anagrafiche"
+    n_anagrafiche.admin_order_field = "_n_anagrafiche"
 
 
 @admin.register(AnagraficaReferenteStudio)
