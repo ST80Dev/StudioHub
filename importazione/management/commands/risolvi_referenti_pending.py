@@ -1,25 +1,23 @@
-"""Risolve i referenti studio rimasti "pending" da import passati.
+"""Risolve i referenti studio rimasti "pending" provando ad associarli a un
+UtenteStudio reale.
 
-Cerca tutte le righe `DatoImportato` con chiavi note (vedi `PENDING_KEYS`):
-- `referente_contabilita_pending` / `referente_consulenza_pending`:
-  prodotte dal nuovo wizard quando il nome dell'addetto non si risolve a un
-  `UtenteStudio` (es. utenti non ancora popolati al momento dell'import).
-- `addetto_contabilita` / `addetto_consulenza`:
-  prodotte dal vecchio mapping `extra:addetto_*`. Backfill dello storico.
+Sorgenti processate:
 
-Per ogni riga: prova a risolvere il valore (free-text) a un `UtenteStudio`
-con la stessa strategia dell'apply (vedi `importazione.apply._match_utente`),
-ed eventualmente con una **mappa di alias** passata via --alias-file
-(JSON `{"nome cosi'": "username"}`) per i casi sporchi.
+1. `AnagraficaReferenteStudio` con `utente IS NULL` (origine principale dopo
+   la migrazione 0014/0015 di anagrafica): valorizza `utente` quando il match
+   sul `nome_grezzo` riesce e svuota `nome_grezzo`.
 
-Modalita':
-  --dry-run            : non scrive, solo riepilogo.
-  --alias-file PATH    : JSON {nome_grezzo: username_o_id_utente}.
-  --rimuovi-risolti    : cancella il DatoImportato dopo aver creato il referente.
-                         Default: marca la chiave come `<chiave>_risolto` per
-                         tenere traccia dell'origine (audit).
+2. `DatoImportato` con chiavi legacy `referente_*_pending` o
+   `addetto_contabilita` / `addetto_consulenza` (per ambienti che non hanno
+   ancora ricevuto la 0015 o che ricevono nuovi import su versioni in fase
+   di rollout). Crea/aggiorna il referente corrispondente e rinomina la
+   chiave a `<chiave>_risolto` per audit.
 
-Idempotente: una seconda esecuzione non duplica i referenti.
+Strategia di match: vedi `importazione.apply._match_utente` (username,
+"Nome Cognome", solo cognome). Per i casi sporchi si passa un
+`--alias-file` JSON `{"nome cosi'": "username o id"}`.
+
+Idempotente: una seconda esecuzione non duplica referenti.
 """
 from __future__ import annotations
 
@@ -37,9 +35,9 @@ from importazione.apply import _match_utente
 from importazione.models import DatoImportato
 
 
-# Mappa chiave DatoImportato -> ruolo. Include le chiavi legacy del vecchio
-# mapping (`extra:addetto_*`) per il backfill dello storico.
-PENDING_KEYS: dict[str, str] = {
+# Mappa chiave DatoImportato legacy -> ruolo. Include sia le chiavi `_pending`
+# del nuovo wizard sia le `addetto_*` del vecchio mapping `extra:addetto_*`.
+LEGACY_DATO_KEYS: dict[str, str] = {
     "referente_contabilita_pending": RuoloReferenteStudio.REFERENTE_CONTABILITA,
     "referente_consulenza_pending": RuoloReferenteStudio.REFERENTE_CONSULENZA,
     "addetto_contabilita": RuoloReferenteStudio.REFERENTE_CONTABILITA,
@@ -49,8 +47,9 @@ PENDING_KEYS: dict[str, str] = {
 
 class Command(BaseCommand):
     help = (
-        "Risolve i referenti studio salvati come DatoImportato "
-        "(pending o legacy) creando le righe AnagraficaReferenteStudio."
+        "Risolve i referenti studio rimasti pending: collega utenti reali "
+        "alle righe AnagraficaReferenteStudio non agganciate (utente=NULL) "
+        "e converte i vecchi DatoImportato legacy in altrettante righe referente."
     )
 
     def add_arguments(self, parser):
@@ -74,55 +73,150 @@ class Command(BaseCommand):
 
         alias_map = _load_alias_map(alias_path) if alias_path else {}
 
-        dati = DatoImportato.objects.filter(chiave__in=PENDING_KEYS.keys()).select_related("anagrafica")
-        totale = dati.count()
-        if totale == 0:
+        stats: Counter = Counter()
+        non_risolti: list[str] = []
+
+        self._risolvi_referenti_raw(alias_map, dry, stats, non_risolti)
+        self._risolvi_dato_importato_legacy(alias_map, dry, rimuovi, stats, non_risolti)
+
+        if not stats and not non_risolti:
             self.stdout.write(self.style.WARNING("Nessun referente pending trovato."))
             return
 
-        self.stdout.write(f"Trovate {totale} righe da processare.")
-        if dry:
-            self.stdout.write(self.style.NOTICE("Modalita' dry-run: niente scritture."))
+        self.stdout.write("")
+        self.stdout.write(self.style.SUCCESS("Riepilogo:"))
+        for k in ("associati", "creati_da_legacy", "gia_presenti",
+                  "risolvibili", "non_risolti", "vuoti", "errori"):
+            if stats[k]:
+                self.stdout.write(f"  {k}: {stats[k]}")
 
-        stats = Counter()
-        non_risolti: list[tuple[int, str, str]] = []  # (riga.id, chiave, valore)
+        if non_risolti:
+            self.stdout.write("")
+            self.stdout.write(self.style.WARNING(
+                f"Non risolti ({len(non_risolti)}). Esempi:"
+            ))
+            for desc in non_risolti[:20]:
+                self.stdout.write(f"  {desc}")
+            if len(non_risolti) > 20:
+                self.stdout.write(f"  … e altri {len(non_risolti) - 20}.")
+            self.stdout.write(
+                "Crea gli utenti in admin o passa --alias-file per mapparli."
+            )
 
-        for d in dati:
-            ruolo = PENDING_KEYS[d.chiave]
-            valore = (d.valore or "").strip()
-            if not valore:
+    # ----------------------------------------------------------------------
+
+    def _risolvi_referenti_raw(self, alias_map, dry, stats, non_risolti):
+        """Processa AnagraficaReferenteStudio con utente=NULL: aggancia
+        l'utente reale, svuota `nome_grezzo` e lascia la riga in vita."""
+        qs = (
+            AnagraficaReferenteStudio.objects
+            .filter(utente__isnull=True, data_fine__isnull=True)
+            .select_related("anagrafica")
+        )
+        for ref in qs.iterator():
+            nome = (ref.nome_grezzo or "").strip()
+            if not nome:
                 stats["vuoti"] += 1
                 continue
 
-            utente = alias_map.get(valore.lower()) or _match_utente(valore)
+            utente = alias_map.get(nome.lower()) or _match_utente(nome)
             if utente is None:
                 stats["non_risolti"] += 1
-                non_risolti.append((d.pk, d.chiave, valore))
+                non_risolti.append(
+                    f"Ref#{ref.pk} [{ref.get_ruolo_display()}] '{nome}' "
+                    f"({ref.anagrafica.denominazione})"
+                )
                 continue
 
             if dry:
                 stats["risolvibili"] += 1
                 continue
 
-            # Scrittura: idempotente, in transazione per singola riga.
             try:
                 with transaction.atomic():
-                    gia_attivo = AnagraficaReferenteStudio.objects.filter(
-                        anagrafica=d.anagrafica,
-                        utente=utente,
-                        ruolo=ruolo,
-                        data_fine__isnull=True,
-                    ).exists()
-                    if not gia_attivo:
-                        AnagraficaReferenteStudio.objects.create(
-                            anagrafica=d.anagrafica,
-                            utente=utente,
-                            ruolo=ruolo,
-                            data_inizio=timezone.now().date(),
+                    duplicato = (
+                        AnagraficaReferenteStudio.objects
+                        .filter(
+                            anagrafica=ref.anagrafica, utente=utente,
+                            ruolo=ref.ruolo, data_fine__isnull=True,
                         )
-                        stats["creati"] += 1
-                    else:
+                        .exclude(pk=ref.pk).exists()
+                    )
+                    if duplicato:
+                        # Esiste gia' un referente attivo con quell'utente:
+                        # chiudo la riga raw per non duplicare.
+                        ref.data_fine = timezone.now().date()
+                        ref.save(update_fields=["data_fine"])
                         stats["gia_presenti"] += 1
+                    else:
+                        ref.utente = utente
+                        ref.nome_grezzo = ""
+                        ref.save(update_fields=["utente", "nome_grezzo"])
+                        stats["associati"] += 1
+            except Exception as exc:  # noqa: BLE001
+                stats["errori"] += 1
+                self.stderr.write(f"Errore su Ref#{ref.pk}: {exc}")
+
+    def _risolvi_dato_importato_legacy(
+        self, alias_map, dry, rimuovi, stats, non_risolti,
+    ):
+        """Processa i DatoImportato legacy (chiavi note in LEGACY_DATO_KEYS).
+        Crea un referente per ognuno: con utente reale se il nome matcha,
+        altrimenti con `nome_grezzo` valorizzato (come fa la 0015)."""
+        dati = (
+            DatoImportato.objects.filter(chiave__in=LEGACY_DATO_KEYS.keys())
+            .select_related("anagrafica")
+        )
+        oggi = timezone.now().date()
+        for d in dati.iterator():
+            ruolo = LEGACY_DATO_KEYS[d.chiave]
+            valore = (d.valore or "").strip()
+            if not valore:
+                stats["vuoti"] += 1
+                continue
+
+            utente = alias_map.get(valore.lower()) or _match_utente(valore)
+
+            if dry:
+                if utente is not None:
+                    stats["risolvibili"] += 1
+                else:
+                    stats["non_risolti"] += 1
+                    non_risolti.append(
+                        f"DatoImportato#{d.pk} [{d.chiave}] '{valore}' "
+                        f"({d.anagrafica.denominazione})"
+                    )
+                continue
+
+            try:
+                with transaction.atomic():
+                    if utente is not None:
+                        gia_presente = AnagraficaReferenteStudio.objects.filter(
+                            anagrafica=d.anagrafica, utente=utente, ruolo=ruolo,
+                            data_fine__isnull=True,
+                        ).exists()
+                        if not gia_presente:
+                            AnagraficaReferenteStudio.objects.create(
+                                anagrafica=d.anagrafica, utente=utente,
+                                ruolo=ruolo, data_inizio=oggi,
+                            )
+                            stats["associati"] += 1
+                        else:
+                            stats["gia_presenti"] += 1
+                    else:
+                        gia_presente = AnagraficaReferenteStudio.objects.filter(
+                            anagrafica=d.anagrafica, utente__isnull=True,
+                            ruolo=ruolo, nome_grezzo__iexact=valore,
+                            data_fine__isnull=True,
+                        ).exists()
+                        if not gia_presente:
+                            AnagraficaReferenteStudio.objects.create(
+                                anagrafica=d.anagrafica, utente=None,
+                                nome_grezzo=valore, ruolo=ruolo, data_inizio=oggi,
+                            )
+                            stats["creati_da_legacy"] += 1
+                        else:
+                            stats["gia_presenti"] += 1
 
                     if rimuovi:
                         d.delete()
@@ -132,27 +226,6 @@ class Command(BaseCommand):
             except Exception as exc:  # noqa: BLE001
                 stats["errori"] += 1
                 self.stderr.write(f"Errore su DatoImportato#{d.pk}: {exc}")
-
-        # Riepilogo
-        self.stdout.write("")
-        self.stdout.write(self.style.SUCCESS("Riepilogo:"))
-        for k in ("creati", "gia_presenti", "risolvibili", "non_risolti",
-                  "vuoti", "errori"):
-            if stats[k]:
-                self.stdout.write(f"  {k}: {stats[k]}")
-
-        if non_risolti:
-            self.stdout.write("")
-            self.stdout.write(self.style.WARNING(
-                f"Non risolti ({len(non_risolti)}). Esempi:"
-            ))
-            for pk, chiave, valore in non_risolti[:20]:
-                self.stdout.write(f"  DatoImportato#{pk} [{chiave}]: {valore!r}")
-            if len(non_risolti) > 20:
-                self.stdout.write(f"  … e altri {len(non_risolti) - 20}.")
-            self.stdout.write(
-                "Crea gli utenti in admin o passa --alias-file per mapparli."
-            )
 
 
 def _load_alias_map(path: str) -> dict[str, object]:

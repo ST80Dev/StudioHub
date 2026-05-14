@@ -21,4 +21,5 @@ urlpatterns = [
     path("<int:pk>/referenti/aggiungi/", views.referente_aggiungi, name="referente_aggiungi"),
     path("<int:pk>/referenti/<int:rid>/chiudi/", views.referente_chiudi, name="referente_chiudi"),
     path("<int:pk>/referenti/<int:rid>/principale/", views.referente_principale, name="referente_principale"),
+    path("<int:pk>/referenti/<int:rid>/associa/", views.referente_associa, name="referente_associa"),
 ]

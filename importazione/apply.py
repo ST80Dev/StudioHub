@@ -399,12 +399,17 @@ def _apply_referenti(
     sessione: ImportSession,
     stats: ApplyStats,
 ) -> None:
-    """Per ogni target referente:
-    - se il nome si risolve a un singolo UtenteStudio, upsert
-      AnagraficaReferenteStudio (idempotente: niente duplicati per
-      anagrafica/utente/ruolo se gia' attivo).
-    - altrimenti salva il nome come DatoImportato con chiave
-      `<target>_pending` (recuperabile con management command).
+    """Per ogni target referente crea/aggiorna una riga
+    `AnagraficaReferenteStudio`:
+
+    - se il nome si risolve a un singolo UtenteStudio, valorizza `utente`;
+    - altrimenti lascia `utente=None` e salva il testo originale in
+      `nome_grezzo` per associarlo manualmente piu' tardi (vedi management
+      command `risolvi_referenti_pending` o il bottone "Associa utente"
+      sul detail cliente).
+
+    Idempotente in entrambi i casi: non crea duplicati attivi per la
+    stessa (anagrafica, ruolo, utente|nome_grezzo).
     """
     for target, raw_value in referenti_raw.items():
         if not raw_value:
@@ -427,12 +432,22 @@ def _apply_referenti(
                 )
                 stats.referenti_assegnati += 1
         else:
-            DatoImportato.objects.update_or_create(
+            # Nessun utente reale a cui collegare: salva il nome grezzo.
+            already = AnagraficaReferenteStudio.objects.filter(
                 anagrafica=anagrafica,
-                chiave=f"{target}_pending",
-                fonte_session=sessione,
-                defaults={"valore": raw_value},
-            )
+                utente__isnull=True,
+                ruolo=ruolo,
+                nome_grezzo__iexact=raw_value,
+                data_fine__isnull=True,
+            ).exists()
+            if not already:
+                AnagraficaReferenteStudio.objects.create(
+                    anagrafica=anagrafica,
+                    utente=None,
+                    nome_grezzo=raw_value,
+                    ruolo=ruolo,
+                    data_inizio=date.today(),
+                )
             stats.referenti_pending += 1
 
 

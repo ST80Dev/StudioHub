@@ -16,30 +16,59 @@
     {% if refs %}
     <ul class="mb-3 divide-y divide-slate-100 dark:divide-slate-800">
         {% for r in refs %}
-        <li class="flex items-center gap-2 py-1.5 text-sm">
-            <span class="flex-1">
-                {{ r.utente }}
-                {% if r.principale %}<span title="Principale" class="text-amber-500">★</span>{% endif %}
-            </span>
-            <span class="font-mono text-[11px] text-slate-400">dal {{ r.data_inizio|date:"d/m/Y" }}</span>
+        <li class="py-1.5 text-sm">
+            <div class="flex items-center gap-2">
+                <span class="flex-1 {% if r.is_pending %}italic text-slate-500{% endif %}">
+                    {{ r.display_name }}
+                    {% if r.is_pending %}
+                        <span title="Importato dall'Excel, non collegato a un utente del sistema"
+                              class="ml-1 rounded bg-amber-100 px-1 py-0.5 text-[10px] font-medium uppercase text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+                            da collegare
+                        </span>
+                    {% endif %}
+                    {% if r.principale %}<span title="Principale" class="text-amber-500">★</span>{% endif %}
+                </span>
+                <span class="font-mono text-[11px] text-slate-400">dal {{ r.data_inizio|date:"d/m/Y" }}</span>
 
-            <button type="button"
-                    hx-post="{% url 'anagrafica:referente_principale' cliente.pk r.pk %}"
-                    hx-target="#referenti-section" hx-swap="outerHTML"
-                    hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
-                    title="{% if r.principale %}Rimuovi principale{% else %}Imposta come principale{% endif %}"
-                    class="rounded px-1.5 py-0.5 text-xs {% if r.principale %}bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200{% else %}border border-slate-300 text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800{% endif %}">
-                ★
-            </button>
-            <button type="button"
-                    hx-post="{% url 'anagrafica:referente_chiudi' cliente.pk r.pk %}"
-                    hx-target="#referenti-section" hx-swap="outerHTML"
-                    hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
-                    hx-confirm="Chiudere {{ r.utente }} come referente {{ label|lower }}?"
-                    title="Chiudi (data fine = oggi)"
-                    class="rounded border border-slate-300 px-1.5 py-0.5 text-xs text-slate-500 hover:bg-red-50 hover:text-red-700 dark:border-slate-700 dark:hover:bg-red-950/40">
-                ×
-            </button>
+                {% if not r.is_pending %}
+                <button type="button"
+                        hx-post="{% url 'anagrafica:referente_principale' cliente.pk r.pk %}"
+                        hx-target="#referenti-section" hx-swap="outerHTML"
+                        hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                        title="{% if r.principale %}Rimuovi principale{% else %}Imposta come principale{% endif %}"
+                        class="rounded px-1.5 py-0.5 text-xs {% if r.principale %}bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200{% else %}border border-slate-300 text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800{% endif %}">
+                    ★
+                </button>
+                {% endif %}
+                <button type="button"
+                        hx-post="{% url 'anagrafica:referente_chiudi' cliente.pk r.pk %}"
+                        hx-target="#referenti-section" hx-swap="outerHTML"
+                        hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                        hx-confirm="Chiudere {{ r.display_name }} come referente {{ label|lower }}?"
+                        title="Chiudi (data fine = oggi)"
+                        class="rounded border border-slate-300 px-1.5 py-0.5 text-xs text-slate-500 hover:bg-red-50 hover:text-red-700 dark:border-slate-700 dark:hover:bg-red-950/40">
+                    ×
+                </button>
+            </div>
+            {% if r.is_pending and utenti_disponibili %}
+            <form hx-post="{% url 'anagrafica:referente_associa' cliente.pk r.pk %}"
+                  hx-target="#referenti-section" hx-swap="outerHTML"
+                  hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                  class="mt-1 flex items-center gap-2 pl-3 text-xs">
+                <span class="text-slate-400">→ associa a:</span>
+                <select name="utente" required
+                        class="rounded border border-slate-300 bg-white px-1.5 py-0.5 text-xs dark:border-slate-700 dark:bg-slate-800">
+                    <option value="">— utente —</option>
+                    {% for u in utenti_disponibili %}
+                        <option value="{{ u.pk }}">{{ u }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit"
+                        class="rounded bg-brand-600 px-1.5 py-0.5 text-[11px] font-medium text-white hover:bg-brand-700">
+                    associa
+                </button>
+            </form>
+            {% endif %}
         </li>
         {% endfor %}
     </ul>
