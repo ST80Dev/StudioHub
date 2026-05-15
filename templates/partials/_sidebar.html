@@ -1,8 +1,9 @@
 {% load static %}
-{# Sidebar collassabile: occupa sempre w-14 nel layout (solo icone). Al hover
-   il pannello si allarga in overlay (absolute) senza spostare il contenuto.
-   Auto-collassa dopo 3s di mouseleave; click su un link → navigazione
-   (la pagina ricarica e parte di nuovo collassata). #}
+{% comment %}
+Sidebar collassabile: occupa sempre w-14 nel layout (solo icone). Al hover
+il pannello si allarga in overlay (absolute) senza spostare il contenuto.
+Auto-collassa dopo 3s di mouseleave; click su un link la chiude subito.
+{% endcomment %}
 <aside class="relative w-14 shrink-0"
        x-data="{
            expanded: false,
