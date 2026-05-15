@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 
+from .forms import UtenteStudioCreationForm
 from .models import AreaAziendale, UtenteStudio
 
 
@@ -14,6 +15,21 @@ class AreaAziendaleAdmin(admin.ModelAdmin):
 
 @admin.register(UtenteStudio)
 class UtenteStudioAdmin(UserAdmin):
+    add_form = UtenteStudioCreationForm
+    add_fieldsets = (
+        (
+            None,
+            {
+                "classes": ("wide",),
+                "fields": ("username", "password1", "password2"),
+                "description": (
+                    "I campi password sono facoltativi: se lasciati vuoti, "
+                    "l'utente viene creato con login disabilitato finché "
+                    "non gli si imposta una password."
+                ),
+            },
+        ),
+    )
     list_display = (
         "username",
         "last_name",
