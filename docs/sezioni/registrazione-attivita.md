@@ -16,7 +16,13 @@ alimentano analisi di carico, marginalità per cliente e timesheet personale.
   o attività trasversale.
 - **Marginalità per cliente**: il cliente ha un **budget orario** annuo
   (totale e/o spalmato per categoria di attività); confrontiamo consumo
-  reale vs budget e ne ricaviamo valore economico via costo/tariffa oraria.
+  reale vs budget e ne ricaviamo valore economico via costo/tariffa
+  oraria. **I parametri costo/tariffa sono quelli dell'AREA cui appartiene
+  la CATEGORIA di attività svolta**, non quelli dell'area di appartenenza
+  dell'addetto. Esempio: un addetto di Contabilità (costo 30€ / tariffa
+  45€) che svolge un'attività di Consulenza Ordinaria (costo 50€ /
+  tariffa 75€) viene valorizzato con i parametri della Consulenza
+  Ordinaria, non della Contabilità.
 - **Avanzamento adempimenti (solo informativo)**: ogni attività può essere
   agganciata a un adempimento specifico. **Non c'è automatismo di
   cambio stato**: lo stato dell'adempimento si gestisce come oggi, le ore
@@ -40,18 +46,21 @@ DEC: nessun lock di periodo (modificabile sempre da autore e admin).
 
 Oggi: `aree = M2M(AreaAziendale)`.
 
-**DEC** — gli addetti hanno **una sola area principale + override
-eventuale** per singola attività. Refactor proposto:
+**DEC** — l'utente ha **una sola area di appartenenza** (informazione di
+organigramma). Refactor proposto:
 
-- `area_principale` = FK `AreaAziendale` (nullable in transitorio).
-- `aree` resta come M2M ma diventa l'insieme delle aree "compatibili"
-  (default = area principale + eventuali aggiuntive utilizzabili come
-  override). Vincolo: `area_principale ∈ aree`.
+- aggiungere `area_appartenenza` = FK `AreaAziendale` (nullable in
+  transitorio).
+- la M2M `aree` esistente può restare come dato secondario (insieme di
+  aree in cui l'utente "può lavorare") oppure essere dismessa: per la
+  valorizzazione delle attività **non viene usata**.
 
-In UI di inserimento attività, il campo **Area** è precompilato con
-`area_principale` ma selezionabile fra `aree` quando l'addetto sta facendo
-un'attività con un "cappello" diverso (es. addetto di Area B che fa
-attività di Area C con costo/tariffa diversi).
+**Importante**: l'area di appartenenza dell'utente NON entra nel calcolo
+costo/tariffa dell'attività registrata. Serve solo per organigramma,
+filtri report ("attività svolte da addetti dell'area Contabilità"),
+default su nuove categorie create dall'utente, ecc. La valorizzazione
+economica usa sempre l'area della **categoria di attività** svolta
+(vedi `RegistrazioneAttivita` sotto).
 
 #### `anagrafica.AreaAziendale`
 
@@ -89,7 +98,13 @@ studio può registrare su qualunque cliente (**DEC**).
 #### `attivita.CategoriaAttivita`
 
 Macro-categoria di attività registrabile (es. "Contabilità", "Dichiarativi
-periodici", "Consulenza", "Bilancio", "Studio interno / formazione").
+periodici", "Consulenza ordinaria", "Bilancio", "Studio interno /
+formazione").
+
+**Ogni categoria appartiene a un'area aziendale**: è da lì che si
+ereditano costo orario e tariffa oraria al momento della registrazione
+dell'attività. Es.: categoria "Consulenza ordinaria" → area "Consulenza
+Ordinaria" (costo 50€ / tariffa 75€).
 
 Distinta da `TipoAdempimentoCatalogo`: una categoria è più ampia di un
 singolo tipo e include anche attività che non corrispondono a un
@@ -100,6 +115,7 @@ adempimento (consulenza ad hoc, riunioni interne, formazione).
 | `codice` | slug lowercase | identificativo stabile |
 | `denominazione` | string | label estesa |
 | `abbreviazione` | string max 8 | per badge/sidebar/report compatti |
+| `area` | FK AreaAziendale PROTECT | determina costo/tariffa di valorizzazione delle attività di questa categoria |
 | `richiede_cliente` | bool | False per "interne studio" (formazione, riunioni) |
 | `attivo` | bool | per dismettere senza eliminare |
 | `ordine` | int | per ordinamento UI |
@@ -113,68 +129,93 @@ registrato.
 
 | Campo | Tipo | Note |
 |---|---|---|
-| `utente` | FK UtenteStudio PROTECT | autore |
-| `area` | FK AreaAziendale PROTECT | snapshot dell'area al momento; default = `utente.area_principale`, override consentito fra `utente.aree` |
+| `utente` | FK UtenteStudio PROTECT | autore (chi ha svolto l'attività) |
+| `area_valorizzazione` | FK AreaAziendale PROTECT | snapshot dell'area da cui derivano costo/tariffa: **= categoria.area al momento del save**, NON area dell'utente |
 | `data` | date | giorno dell'attività |
-| `durata_minuti` | int positivo | granularità: minuti, UI in formato `H:MM` |
+| `durata_ore` | Decimal(5,2) positivo | granularità: decimali di ora (es. `1.50`, `0.25`, `2.75`) |
 | `cliente` | FK Anagrafica PROTECT nullable | obbligatorio se `categoria.richiede_cliente=True` |
-| `categoria` | FK CategoriaAttivita PROTECT | |
+| `categoria` | FK CategoriaAttivita PROTECT | porta con sé l'area di valorizzazione |
 | `adempimento` | FK adempimenti.Adempimento PROTECT nullable | aggancio opzionale a un adempimento specifico |
 | `descrizione` | text | descrizione libera di cosa è stato fatto |
-| `costo_orario_snapshot` | Decimal | valore al momento dell'inserimento (snapshot per marginalità storiche) |
-| `tariffa_oraria_snapshot` | Decimal | idem |
-| `costo_valorizzato` | Decimal calcolato | `durata × costo_orario_snapshot / 60` |
-| `valore_valorizzato` | Decimal calcolato | `durata × tariffa_oraria_snapshot / 60` |
+| `costo_orario_snapshot` | Decimal | costo/h dell'`area_valorizzazione` al momento dell'inserimento |
+| `tariffa_oraria_snapshot` | Decimal | tariffa/h dell'`area_valorizzazione` al momento dell'inserimento |
+| `costo_valorizzato` | Decimal calcolato | `durata_ore × costo_orario_snapshot` |
+| `valore_valorizzato` | Decimal calcolato | `durata_ore × tariffa_oraria_snapshot` |
 | `created_at` / `updated_at` | auto | |
 | `updated_by` | FK UtenteStudio nullable | per audit |
 
 Indici: `(utente, data)`, `(cliente, data)`, `(categoria, data)`,
-`(adempimento)`.
+`(adempimento)`, `(area_valorizzazione, data)`.
 
 Vincoli:
-- `durata_minuti > 0`.
+- `durata_ore > 0`.
 - Se `categoria.richiede_cliente`, allora `cliente NOT NULL`.
 - Se `adempimento` non nullo, allora `adempimento.anagrafica == cliente`.
 
-Snapshot di costo/tariffa: si fa al **save** (sia create che update), per
-mantenere allineato il valore alla configurazione corrente. Se in futuro
-si introduce la storicizzazione (Opzione B sopra), si legge dalla tabella
-storica per la `data` dell'attività e si elimina lo snapshot in colonna.
+**Snapshot di area + costo + tariffa al save**: ad ogni save (create o
+update) si rileggono `categoria.area` e i valori correnti di
+`costo_orario`/`tariffa_oraria` di quell'area, e si scrivono nei tre
+campi snapshot. Così la valorizzazione resta stabile anche se in
+seguito si modificano area di una categoria o tariffe di un'area. Se si
+adotta la storicizzazione tariffe (Opzione B in `AreaAziendale`), si
+legge la tariffa valida alla `data` dell'attività e gli snapshot
+diventano ridondanti (vedi decisioni aperte).
 
-#### `attivita.BudgetCliente`
+#### `attivita.BudgetAddetto`
 
-Monte ore preventivato per un cliente in un anno. **DEC**: i tre livelli
-coesistono.
+> **Preliminare** — la modellazione del budget verrà approfondita in una
+> sessione dedicata. Quanto segue è una bozza coerente con le decisioni
+> fin qui prese, non un design finale.
+
+Monte ore preventivato annualmente. **DEC**: due livelli alternativi
+(mutualmente esclusivi per riga), entrambi sempre **per addetto**:
+
+1. **addetto × cliente** — "Mario farà 40h sul cliente Rossi nel 2026"
+   (sappiamo a priori a quale cliente quelle ore saranno dedicate).
+2. **addetto × categoria** — "Mario farà 200h di Consulenza Ordinaria
+   nel 2026" (sappiamo che farà quelle ore in quella categoria, ma non
+   sappiamo ancora la ripartizione per cliente).
 
 | Campo | Tipo | Note |
 |---|---|---|
-| `cliente` | FK Anagrafica | |
-| `anno` | int | anno fiscale |
-| `utente` | FK UtenteStudio nullable | NULL = budget aggregato cliente, non per addetto |
-| `categoria` | FK CategoriaAttivita nullable | NULL = totale, non per categoria |
-| `area` | FK AreaAziendale nullable | per ragionare in € sui livelli che non vincolano l'utente (vedi nota) |
-| `ore` | Decimal | ore preventivate |
+| `utente` | FK UtenteStudio PROTECT | obbligatorio |
+| `anno` | int | anno solare/fiscale |
+| `cliente` | FK Anagrafica PROTECT nullable | valorizzato per livello 1, NULL per livello 2 |
+| `categoria` | FK CategoriaAttivita PROTECT nullable | valorizzato per livello 2, NULL per livello 1 |
+| `ore` | Decimal(7,2) | ore preventivate nell'anno |
+| `note` | text blank | |
 
-Unique: `(cliente, anno, utente, categoria)` (con NULL come "qualunque").
+Vincoli:
+- esattamente uno fra `cliente` e `categoria` valorizzato (XOR).
+- Unique: `(utente, anno, cliente, categoria)` con NULL distinti.
 
-Livelli (DEC):
+Confronto con consuntivo:
 
-1. **addetto × cliente** (`utente` valorizzato, `categoria` NULL): "Mario
-   farà 40h sul cliente Rossi nel 2026".
-2. **addetto × cliente × categoria** (entrambi valorizzati): "Mario farà
-   30h di Contabilità e 10h di Dichiarativi su Rossi".
-3. **addetto × categoria** (`utente` valorizzato, `cliente` NULL,
-   `categoria` valorizzato): "Mario farà 200h di Formazione nel 2026"
-   (trasversale, non legato a uno specifico cliente).
+- **Livello 1 (addetto×cliente)**: budget Mario su Rossi vs somma
+  `RegistrazioneAttivita` con `utente=Mario, cliente=Rossi, anno=2026`.
+- **Livello 2 (addetto×categoria)**: budget Mario su Consulenza Ordinaria
+  vs somma `RegistrazioneAttivita` con `utente=Mario, categoria=Consulenza
+  Ord., anno=2026` (somma su tutti i clienti, anche su righe senza
+  cliente come categorie con `richiede_cliente=False`).
 
-Convenzione di coerenza: se per un cliente esistono budget a livello 2
-(categoria), il budget cliente totale è la somma; lato UI si verifica e
-si segnala se il totale "manuale" (livello 1) diverge.
+Conversione in € a runtime:
+- Livello 1: `ore × tariffa media` (categoria di lavoro non nota in
+  fase di budget — qui può servire un valore "tariffa di riferimento
+  cliente" o la media pesata storica).
+- Livello 2: `ore × tariffa_oraria` dell'area della categoria budgetata
+  (deterministico).
 
-Conversione in € a runtime: `ore × tariffa_oraria` dell'area dell'utente
-(se `utente` valorizzato) o dell'area del livello (`area` o quella
-prevalente del cliente). Il valore non viene memorizzato per non doverlo
-ricalcolare alle modifiche tariffa.
+**OPEN** — per il livello 1 (addetto×cliente) la valorizzazione
+economica del budget è ambigua perché non sappiamo a priori in che mix
+di categorie quelle ore saranno spese. Possibili approcci:
+- (a) si usa la tariffa dell'area di appartenenza dell'utente come
+  proxy;
+- (b) si valorizza solo in ore (no €) per il livello 1 e si lascia che
+  la marginalità in € emerga solo a consuntivo;
+- (c) ogni cliente ha una "tariffa di riferimento" configurabile che
+  proietta il budget orario in un valore atteso.
+
+L'opzione (b) è la più onesta dato il modello scelto.
 
 #### `attivita.ConsumoAtteso` (opzionale, fase 2)
 
@@ -250,11 +291,15 @@ DEC: tutte e tre le modalità di inserimento coesistono.
 
 ### Comportamenti comuni
 
-- Durata sempre in formato `H:MM` (input parsabile da "1,5" → 1:30 e
-  "90m" → 1:30, oltre al formato canonico "1:30").
+- Durata sempre in **decimali di ora** (es. `1.5`, `0.25`, `2.75`).
+  Input tollerante alla virgola italiana (`1,5` → `1.5`); validazione
+  lato server: `> 0`, max 2 decimali.
 - Salvataggio HTMX, conferma toast inline, ritorno alla vista corrente
   con stato preservato.
-- Validazione lato server di area ∈ aree dell'utente.
+- L'utente NON sceglie l'area dell'attività: viene derivata dalla
+  categoria selezionata. Mostrato in form come label info ("Area di
+  valorizzazione: Consulenza Ordinaria — 50€/h costo, 75€/h tariffa")
+  per chiarezza.
 
 ---
 
@@ -271,14 +316,16 @@ DEC v1: **scheda addetto / timesheet personale**.
 - Tabella registrazioni paginata (50/pag, pattern `lista_clienti`):
   data, durata, cliente, categoria, adempimento, area, descrizione.
 - Totali per periodo: ore totali, ore per categoria, ore per cliente.
-- Confronto vs budget personale (somma budget livello 1 dei clienti +
-  budget trasversale livello 3): ore attese vs consumate.
+- Confronto vs budget personale: somma budget addetto×cliente di tutti i
+  clienti dell'utente + budget addetto×categoria trasversali → ore attese
+  vs consumate.
 
 ### v2 — Scheda cliente con consumo
 
 Sezione nella scheda cliente:
 - Budget totale (annuo) per anno corrente vs consumo.
-- Dettaglio per categoria (se esistono budget livello 2).
+- Dettaglio per categoria (consuntivo: ore consumate raggruppate per
+  categoria sul cliente).
 - Dettaglio per addetto (chi ha lavorato quanto su questo cliente).
 - Curva atteso vs reale nel tempo.
 - Marginalità: `compenso_annuo − somma costo_valorizzato`.
@@ -378,8 +425,10 @@ scadenza in cui si fa il grosso del lavoro).
 - `/configurazione/attivita/categorie` — CRUD categorie.
 - `/configurazione/attivita/aree` — gestione costo/tariffa per area (oggi
   esistono solo le denominazioni).
-- `/configurazione/attivita/budget/<cliente_id>` — impostazione budget
-  multi-livello del cliente per l'anno corrente.
+- `/configurazione/attivita/budget` — impostazione budget addetto: per
+  ogni utente e anno, riga per ogni cliente assegnato (livello
+  addetto×cliente) e riga per ogni categoria con monte ore trasversale
+  (livello addetto×categoria).
 
 ---
 
@@ -402,7 +451,7 @@ scadenza in cui si fa il grosso del lavoro).
 
 ### Fase 2 — Budget e timesheet
 
-- Modello `BudgetCliente` + UI configurazione.
+- Modello `BudgetAddetto` + UI configurazione.
 - Timesheet settimanale a griglia (3).
 - Confronto consumato vs atteso lineare nello scheda addetto.
 
