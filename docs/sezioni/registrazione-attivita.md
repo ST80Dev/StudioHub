@@ -2,7 +2,7 @@
 
 Sezione dedicata in sidebar, **separata** sia dal catalogo `Adempimento` sia
 da "Avanzamento operativo". Ogni addetto dello studio registra le proprie
-attività quotidiane (cliente, categoria, durata, descrizione). Le ore
+attività quotidiane (cliente, attività, durata, descrizione). Le ore
 alimentano analisi di carico, marginalità per cliente e timesheet personale.
 
 > File di lavoro / note di progettazione. Le scelte già confermate sono
@@ -14,15 +14,14 @@ alimentano analisi di carico, marginalità per cliente e timesheet personale.
 
 - **Rendicontazione interna**: chi ha fatto cosa, quanto, su quale cliente
   o attività trasversale.
-- **Marginalità per cliente**: il cliente ha un **budget orario** annuo
-  (totale e/o spalmato per categoria di attività); confrontiamo consumo
-  reale vs budget e ne ricaviamo valore economico via costo/tariffa
-  oraria. **I parametri costo/tariffa sono quelli dell'AREA cui appartiene
-  la CATEGORIA di attività svolta**, non quelli dell'area di appartenenza
-  dell'addetto. Esempio: un addetto di Contabilità (costo 30€ / tariffa
-  45€) che svolge un'attività di Consulenza Ordinaria (costo 50€ /
-  tariffa 75€) viene valorizzato con i parametri della Consulenza
-  Ordinaria, non della Contabilità.
+- **Marginalità per cliente**: il cliente ha un **budget orario** annuo;
+  confrontiamo consumo reale vs budget e ne ricaviamo valore economico
+  via costo/tariffa oraria. **I parametri costo/tariffa sono quelli
+  dell'AREA cui appartiene l'ATTIVITÀ svolta**, non quelli dell'area di
+  appartenenza dell'addetto. Esempio: un addetto di Contabilità (costo
+  30€ / tariffa 45€) che svolge un'attività dell'area Consulenza
+  Ordinaria (costo 50€ / tariffa 75€) viene valorizzato con i parametri
+  della Consulenza Ordinaria, non della Contabilità.
 - **Avanzamento adempimenti (solo informativo)**: ogni attività può essere
   agganciata a un adempimento specifico. **Non c'è automatismo di
   cambio stato**: lo stato dell'adempimento si gestisce come oggi, le ore
@@ -57,10 +56,9 @@ organigramma). Refactor proposto:
 
 **Importante**: l'area di appartenenza dell'utente NON entra nel calcolo
 costo/tariffa dell'attività registrata. Serve solo per organigramma,
-filtri report ("attività svolte da addetti dell'area Contabilità"),
-default su nuove categorie create dall'utente, ecc. La valorizzazione
-economica usa sempre l'area della **categoria di attività** svolta
-(vedi `RegistrazioneAttivita` sotto).
+filtri report ("registrazioni svolte da addetti dell'area Contabilità"),
+ecc. La valorizzazione economica usa sempre l'area dell'**Attività**
+svolta (vedi `Attivita` e `RegistrazioneAttivita` sotto).
 
 #### `anagrafica.AreaAziendale`
 
@@ -95,32 +93,53 @@ studio può registrare su qualunque cliente (**DEC**).
 
 ### Nuove entità
 
-#### `attivita.CategoriaAttivita`
+#### `attivita.Attivita`
 
-Macro-categoria di attività registrabile (es. "Contabilità", "Dichiarativi
-periodici", "Consulenza ordinaria", "Bilancio", "Studio interno /
-formazione").
+Voce specifica del catalogo attività registrabili. **Gerarchia a due
+livelli**: `AreaAziendale` (top) → `Attivita` (specifica). Ogni area ha
+il proprio elenco di attività dedicate.
 
-**Ogni categoria appartiene a un'area aziendale**: è da lì che si
-ereditano costo orario e tariffa oraria al momento della registrazione
-dell'attività. Es.: categoria "Consulenza ordinaria" → area "Consulenza
-Ordinaria" (costo 50€ / tariffa 75€).
+Esempi (indicativi, da affinare con l'utente):
 
-Distinta da `TipoAdempimentoCatalogo`: una categoria è più ampia di un
-singolo tipo e include anche attività che non corrispondono a un
-adempimento (consulenza ad hoc, riunioni interne, formazione).
+- Area **Contabilità**: "Registrazione FE", "Registrazione FA",
+  "Quadratura banche", "Liquidazione IVA", "Gestione cespiti".
+- Area **Consulenza Ordinaria**: "Consulenza fiscale telefonica",
+  "Risposta interpello", "Predisposizione F24", "Predisposizione
+  dichiarativi".
+- Area **Consulenza Straordinaria**: "Operazione straordinaria",
+  "Perizia", "Due diligence", "Contenzioso tributario".
+- Area **Attività Interne**: "Formazione", "Riunione studio",
+  "Aggiornamento normativo", "Gestione organizzativa".
+
+**Costo/tariffa**: NON sono campi di `Attivita`, vengono presi
+dall'`area` di appartenenza al momento della registrazione (vedi
+snapshot in `RegistrazioneAttivita`). Quindi se l'utente cambia il
+costo/tariffa dell'area "Consulenza Ordinaria", da quel momento in poi
+le nuove registrazioni di tutte le attività di quell'area si valorizzano
+al nuovo importo.
+
+Distinta da `TipoAdempimentoCatalogo`: l'`Attivita` è la dimensione
+analitica del lavoro svolto; il tipo adempimento è il "pezzo formale"
+su cui eventualmente si lavora. Si possono collegare nella registrazione
+ma sono indipendenti.
 
 | Campo | Tipo | Note |
 |---|---|---|
-| `codice` | slug lowercase | identificativo stabile |
+| `codice` | slug lowercase | identificativo stabile (univoco globale o per area, vedi OPEN) |
+| `area` | FK AreaAziendale PROTECT | determina costo/tariffa di valorizzazione |
 | `denominazione` | string | label estesa |
-| `abbreviazione` | string max 8 | per badge/sidebar/report compatti |
-| `area` | FK AreaAziendale PROTECT | determina costo/tariffa di valorizzazione delle attività di questa categoria |
-| `richiede_cliente` | bool | False per "interne studio" (formazione, riunioni) |
-| `attivo` | bool | per dismettere senza eliminare |
-| `ordine` | int | per ordinamento UI |
+| `abbreviazione` | string max 8 blank | per badge/report compatti, opzionale |
+| `richiede_cliente` | bool default True | False per attività interne (formazione, riunioni studio) |
+| `attivo` | bool default True | per dismettere senza eliminare |
+| `ordine` | int | per ordinamento all'interno dell'area |
 
-Editabile da admin Django e da UI Configurazione.
+Editabile da admin Django e da UI Configurazione (`/configurazione/
+attivita/catalogo` con vista raggruppata per area).
+
+**OPEN** — `codice` univoco globale o solo `(area, codice)`? Il secondo
+permette di avere "registrazione" sia in Contabilità che in altre aree
+senza conflitti, ma rende meno utile il codice come identificativo
+parlante. Suggerito: `(area, codice)` unique.
 
 #### `attivita.RegistrazioneAttivita`
 
@@ -130,11 +149,11 @@ registrato.
 | Campo | Tipo | Note |
 |---|---|---|
 | `utente` | FK UtenteStudio PROTECT | autore (chi ha svolto l'attività) |
-| `area_valorizzazione` | FK AreaAziendale PROTECT | snapshot dell'area da cui derivano costo/tariffa: **= categoria.area al momento del save**, NON area dell'utente |
+| `attivita` | FK Attivita PROTECT | l'attività svolta; porta con sé l'area di valorizzazione |
+| `area_valorizzazione` | FK AreaAziendale PROTECT | snapshot: **= attivita.area al momento del save**, NON area dell'utente |
 | `data` | date | giorno dell'attività |
 | `durata_ore` | Decimal(5,2) positivo | granularità: decimali di ora (es. `1.50`, `0.25`, `2.75`) |
-| `cliente` | FK Anagrafica PROTECT nullable | obbligatorio se `categoria.richiede_cliente=True` |
-| `categoria` | FK CategoriaAttivita PROTECT | porta con sé l'area di valorizzazione |
+| `cliente` | FK Anagrafica PROTECT nullable | obbligatorio se `attivita.richiede_cliente=True` |
 | `adempimento` | FK adempimenti.Adempimento PROTECT nullable | aggancio opzionale a un adempimento specifico |
 | `descrizione` | text | descrizione libera di cosa è stato fatto |
 | `costo_orario_snapshot` | Decimal | costo/h dell'`area_valorizzazione` al momento dell'inserimento |
@@ -144,22 +163,22 @@ registrato.
 | `created_at` / `updated_at` | auto | |
 | `updated_by` | FK UtenteStudio nullable | per audit |
 
-Indici: `(utente, data)`, `(cliente, data)`, `(categoria, data)`,
+Indici: `(utente, data)`, `(cliente, data)`, `(attivita, data)`,
 `(adempimento)`, `(area_valorizzazione, data)`.
 
 Vincoli:
 - `durata_ore > 0`.
-- Se `categoria.richiede_cliente`, allora `cliente NOT NULL`.
+- Se `attivita.richiede_cliente`, allora `cliente NOT NULL`.
 - Se `adempimento` non nullo, allora `adempimento.anagrafica == cliente`.
 
 **Snapshot di area + costo + tariffa al save**: ad ogni save (create o
-update) si rileggono `categoria.area` e i valori correnti di
+update) si rileggono `attivita.area` e i valori correnti di
 `costo_orario`/`tariffa_oraria` di quell'area, e si scrivono nei tre
 campi snapshot. Così la valorizzazione resta stabile anche se in
-seguito si modificano area di una categoria o tariffe di un'area. Se si
-adotta la storicizzazione tariffe (Opzione B in `AreaAziendale`), si
-legge la tariffa valida alla `data` dell'attività e gli snapshot
-diventano ridondanti (vedi decisioni aperte).
+seguito si cambia l'area di un'`Attivita` o si modificano le tariffe
+di un'area. Se si adotta la storicizzazione tariffe (Opzione B in
+`AreaAziendale`), si legge la tariffa valida alla `data` dell'attività
+e gli snapshot diventano ridondanti (vedi decisioni aperte).
 
 #### `attivita.BudgetAddetto`
 
@@ -172,8 +191,8 @@ Monte ore preventivato annualmente. **DEC**: due livelli alternativi
 
 1. **addetto × cliente** — "Mario farà 40h sul cliente Rossi nel 2026"
    (sappiamo a priori a quale cliente quelle ore saranno dedicate).
-2. **addetto × categoria** — "Mario farà 200h di Consulenza Ordinaria
-   nel 2026" (sappiamo che farà quelle ore in quella categoria, ma non
+2. **addetto × area** — "Mario farà 200h sull'area Consulenza Ordinaria
+   nel 2026" (sappiamo che farà quelle ore in quell'area, ma non
    sappiamo ancora la ripartizione per cliente).
 
 | Campo | Tipo | Note |
@@ -181,35 +200,40 @@ Monte ore preventivato annualmente. **DEC**: due livelli alternativi
 | `utente` | FK UtenteStudio PROTECT | obbligatorio |
 | `anno` | int | anno solare/fiscale |
 | `cliente` | FK Anagrafica PROTECT nullable | valorizzato per livello 1, NULL per livello 2 |
-| `categoria` | FK CategoriaAttivita PROTECT nullable | valorizzato per livello 2, NULL per livello 1 |
+| `area` | FK AreaAziendale PROTECT nullable | valorizzato per livello 2, NULL per livello 1 |
 | `ore` | Decimal(7,2) | ore preventivate nell'anno |
 | `note` | text blank | |
 
 Vincoli:
-- esattamente uno fra `cliente` e `categoria` valorizzato (XOR).
-- Unique: `(utente, anno, cliente, categoria)` con NULL distinti.
+- esattamente uno fra `cliente` e `area` valorizzato (XOR).
+- Unique: `(utente, anno, cliente, area)` con NULL distinti.
 
 Confronto con consuntivo:
 
 - **Livello 1 (addetto×cliente)**: budget Mario su Rossi vs somma
-  `RegistrazioneAttivita` con `utente=Mario, cliente=Rossi, anno=2026`.
-- **Livello 2 (addetto×categoria)**: budget Mario su Consulenza Ordinaria
-  vs somma `RegistrazioneAttivita` con `utente=Mario, categoria=Consulenza
-  Ord., anno=2026` (somma su tutti i clienti, anche su righe senza
-  cliente come categorie con `richiede_cliente=False`).
+  `durata_ore` di `RegistrazioneAttivita` con `utente=Mario,
+  cliente=Rossi, anno(data)=2026` (su tutte le attività, di qualunque
+  area).
+- **Livello 2 (addetto×area)**: budget Mario sull'area Consulenza
+  Ordinaria vs somma `durata_ore` di `RegistrazioneAttivita` con
+  `utente=Mario, area_valorizzazione=Consulenza Ord., anno(data)=2026`
+  (su tutti i clienti, incluse attività senza cliente).
 
 Conversione in € a runtime:
-- Livello 1: `ore × tariffa media` (categoria di lavoro non nota in
-  fase di budget — qui può servire un valore "tariffa di riferimento
-  cliente" o la media pesata storica).
-- Livello 2: `ore × tariffa_oraria` dell'area della categoria budgetata
-  (deterministico).
+- Livello 2: `ore × tariffa_oraria` dell'area budgetata (deterministico).
+- Livello 1: ambigua perché non sappiamo a priori in che mix di aree
+  quelle ore saranno spese (vedi OPEN sotto).
+
+**OPEN** — granularità del livello 2: si budgetta per area
+(`addetto × area`) o anche per singola `Attivita` (`addetto × attivita`)?
+Per ora propendo per area, più gestibile come pianificazione macro;
+l'attività singola sarebbe troppa granularità per un budget annuo.
+Da confermare nella sessione di approfondimento dedicata al budget.
 
 **OPEN** — per il livello 1 (addetto×cliente) la valorizzazione
 economica del budget è ambigua perché non sappiamo a priori in che mix
-di categorie quelle ore saranno spese. Possibili approcci:
-- (a) si usa la tariffa dell'area di appartenenza dell'utente come
-  proxy;
+di aree quelle ore saranno spese. Possibili approcci:
+- (a) si usa la tariffa dell'area di appartenenza dell'utente come proxy;
 - (b) si valorizza solo in ore (no €) per il livello 1 e si lascia che
   la marginalità in € emerga solo a consuntivo;
 - (c) ogni cliente ha una "tariffa di riferimento" configurabile che
@@ -233,27 +257,31 @@ render del report?
 
 ---
 
-## Categoria attività vs tipo adempimento
+## Attività vs tipo adempimento
 
 Sono concetti diversi e tutti e due servono. Mapping logico:
 
-- **CategoriaAttivita** è la dimensione di analisi del lavoro (cosa
-  stiamo facendo: contabilità, consulenza, formazione, ecc.).
-- **TipoAdempimentoCatalogo** è il "pezzo formale" su cui si lavora (LIPE,
-  Bilancio UE, F24).
+- **Attivita** (con la sua area) è la dimensione di analisi del lavoro
+  svolto: cosa stiamo facendo concretamente, in quale area aziendale.
+- **TipoAdempimentoCatalogo** è il "pezzo formale" su cui si lavora
+  (LIPE, Bilancio UE, F24).
 
-Una stessa attività può appartenere a una categoria e — facoltativamente
-— a uno specifico adempimento. Esempi:
-- "1h di Contabilità su Rossi, generica" → categoria=Contabilità,
-  cliente=Rossi, adempimento=NULL.
-- "0:30 di Contabilità su Rossi, per LIPE Q2 2026" → categoria=Contabilità,
-  cliente=Rossi, adempimento=Adempimento(tipo=LIPE, Q2 2026).
-- "2h di Formazione interna" → categoria=Formazione, cliente=NULL,
+Una `RegistrazioneAttivita` ha sempre un'`Attivita` e — facoltativamente
+— un `Adempimento` collegato. Esempi:
+
+- "1h sul cliente Rossi, registrazione FE generica" →
+  attivita="Registrazione FE" (area Contabilità), cliente=Rossi,
   adempimento=NULL.
+- "0.5h sul cliente Rossi, predisposizione F24 per LIPE Q2 2026" →
+  attivita="Predisposizione F24" (area Consulenza Ordinaria),
+  cliente=Rossi, adempimento=Adempimento(tipo=LIPE, Q2 2026).
+- "2h di Formazione interna" → attivita="Formazione" (area Attività
+  Interne), cliente=NULL, adempimento=NULL.
 
-**OPEN** — vincolo soft fra categoria e tipi di adempimento? Es.
-"Categoria Contabilità è coerente con adempimenti di tipo F24, LIPE, …",
-solo come warning UI? Per la v1 si può rinviare.
+**OPEN** — vincolo soft fra `Attivita` e tipi di adempimento? Es.
+"Attività 'Predisposizione F24' è coerente con adempimenti di tipo F24,
+LIPE", solo come filtro/warning nell'autocomplete adempimento. Per la
+v1 si può rinviare.
 
 ---
 
@@ -443,7 +471,7 @@ scadenza in cui si fa il grosso del lavoro).
 
 ### Fase 1 — Inserimento
 
-- Modello `CategoriaAttivita` + `RegistrazioneAttivita`.
+- Modello `Attivita` + `RegistrazioneAttivita`.
 - Modale globale di inserimento (1).
 - Pagina diario giornaliero (2).
 - Pagina "le mie attività" con paginazione e filtri (pattern
