@@ -173,6 +173,26 @@ STANDARD_COLUMNS: dict[str, ColumnSpec] = {
         css_th="px-3 py-1",
         css_td="px-3",
     ),
+    "data_invio": ColumnSpec(
+        code="data_invio",
+        label="Data invio",
+        label_short="Inv.",
+        sort_field="data_invio",
+        filter_param=None,  # niente filtro: data libera senza dropdown
+        filter_kind=None,
+        css_th="px-3 py-1 w-28",
+        css_td="px-3 tabular-nums text-xs",
+    ),
+    "protocollo_invio": ColumnSpec(
+        code="protocollo_invio",
+        label="N° Fornitura",
+        label_short="N° Forn.",
+        sort_field="protocollo_invio",
+        filter_param="f_protocollo",
+        filter_kind="text",
+        css_th="px-3 py-1 w-28",
+        css_td="px-3 font-mono text-xs",
+    ),
     "note": ColumnSpec(
         code="note",
         label="Note periodo",
@@ -189,19 +209,19 @@ STANDARD_COLUMNS: dict[str, ColumnSpec] = {
 # Set di default usato quando per un tipo adempimento non e' definita
 # una configurazione `VistaAdempimentoColonne`. Ordine = ordine in tabella.
 # Le viste aggregate (es. anno LIPE) escluderanno automaticamente le colonne
-# per-periodo (`stato`, `note`).
+# per-periodo (`stato`, `note`, `data_invio`, `protocollo_invio`).
 DEFAULT_COLUMN_CODES: list[str] = [
-    "codice_interno",
+    "codice_multi",
     "cliente",
-    "codice_fiscale",
-    "partita_iva",
     "tipo_soggetto",
-    "regime_contabile",
     "tipo_contabilita",
+    "regime_contabile",
     "periodicita_iva",
     "referente_contab",
     "referente_consul",
     "stato",
+    "data_invio",
+    "protocollo_invio",
     "note",
 ]
 
@@ -209,7 +229,9 @@ DEFAULT_COLUMN_CODES: list[str] = [
 # Colonne che hanno senso solo nelle viste "singolo periodo": sono attributi
 # del record `Adempimento` (non dell'anagrafica) e nelle viste aggregate
 # (es. LIPE-anno con 4 celle Q1..Q4) verrebbero ambigue.
-PER_PERIOD_CODES: frozenset[str] = frozenset({"stato", "note"})
+PER_PERIOD_CODES: frozenset[str] = frozenset({
+    "stato", "note", "data_invio", "protocollo_invio",
+})
 
 
 def resolve_columns(
