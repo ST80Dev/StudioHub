@@ -95,51 +95,72 @@ studio può registrare su qualunque cliente (**DEC**).
 
 #### `attivita.Attivita`
 
-Voce specifica del catalogo attività registrabili. **Gerarchia a due
-livelli**: `AreaAziendale` (top) → `Attivita` (specifica). Ogni area ha
-il proprio elenco di attività dedicate.
+Voce del catalogo attività registrabili. **Gerarchia a tre livelli**:
+`AreaAziendale` (top) → `Attivita` padre → `Attivita` figlia
+(sub-attività, opzionale, **massimo 1 livello di figli**).
+
+Le sub-attività sono uno strato di dettaglio opzionale che l'utente può
+sfruttare per puntualizzare meglio cosa ha fatto (tipicamente
+corrispondono alle **fasi di una checklist** del relativo adempimento,
+quando esiste). Sono sempre opzionali: la `RegistrazioneAttivita` può
+puntare al padre (utente non vuole dettagliare) o a una figlia (utente
+vuole il dettaglio).
 
 Esempi (indicativi, da affinare con l'utente):
 
-- Area **Contabilità**: "Registrazione FE", "Registrazione FA",
-  "Quadratura banche", "Liquidazione IVA", "Gestione cespiti".
-- Area **Consulenza Ordinaria**: "Consulenza fiscale telefonica",
-  "Risposta interpello", "Predisposizione F24", "Predisposizione
-  dichiarativi".
-- Area **Consulenza Straordinaria**: "Operazione straordinaria",
-  "Perizia", "Due diligence", "Contenzioso tributario".
-- Area **Attività Interne**: "Formazione", "Riunione studio",
-  "Aggiornamento normativo", "Gestione organizzativa".
+- Area **Contabilità**:
+  - "Registrazione FE" → figlie: "FE ricevute", "FE emesse",
+    "FE corrispettivi".
+  - "Quadratura banche" (senza figlie).
+- Area **Consulenza Ordinaria**:
+  - "Predisposizione LIPE" → figlie: "Estrazione dati", "Controllo
+    coerenza", "Invio telematico".
+  - "Consulenza fiscale telefonica" (senza figlie).
+- Area **Consulenza Straordinaria**:
+  - "Operazione straordinaria" → figlie: "Analisi preliminare",
+    "Predisposizione atti", "Adempimenti post".
+- Area **Attività Interne**:
+  - "Formazione", "Riunione studio" (tipicamente senza figlie).
 
 **Costo/tariffa**: NON sono campi di `Attivita`, vengono presi
 dall'`area` di appartenenza al momento della registrazione (vedi
-snapshot in `RegistrazioneAttivita`). Quindi se l'utente cambia il
-costo/tariffa dell'area "Consulenza Ordinaria", da quel momento in poi
-le nuove registrazioni di tutte le attività di quell'area si valorizzano
-al nuovo importo.
-
-Distinta da `TipoAdempimentoCatalogo`: l'`Attivita` è la dimensione
-analitica del lavoro svolto; il tipo adempimento è il "pezzo formale"
-su cui eventualmente si lavora. Si possono collegare nella registrazione
-ma sono indipendenti.
+snapshot in `RegistrazioneAttivita`). I figli **ereditano l'area del
+padre** (vincolo): non si può cambiare area su una sub-attività.
 
 | Campo | Tipo | Note |
 |---|---|---|
-| `codice` | slug lowercase | identificativo stabile (univoco globale o per area, vedi OPEN) |
-| `area` | FK AreaAziendale PROTECT | determina costo/tariffa di valorizzazione |
+| `codice` | slug lowercase | identificativo stabile |
+| `parent` | FK self Attivita PROTECT nullable | NULL = attività padre (livello 1); valorizzato = sub-attività (livello 2) |
+| `area` | FK AreaAziendale PROTECT | per i figli: deve essere = `parent.area` |
 | `denominazione` | string | label estesa |
-| `abbreviazione` | string max 8 blank | per badge/report compatti, opzionale |
-| `richiede_cliente` | bool default True | False per attività interne (formazione, riunioni studio) |
+| `abbreviazione` | string max 8 blank | per badge/report compatti |
+| `richiede_cliente` | bool default True | False per attività interne; sui figli si eredita di default ma override consentito |
 | `attivo` | bool default True | per dismettere senza eliminare |
-| `ordine` | int | per ordinamento all'interno dell'area |
+| `ordine` | int | ordinamento all'interno del livello (fra padri di un'area, o fra figli di un padre) |
+
+Vincoli:
+
+- **Profondità max 2**: se `parent` è valorizzato, allora
+  `parent.parent IS NULL` (un figlio non può avere a sua volta figli).
+- Se `parent` valorizzato, `area == parent.area`.
+- Unique consigliato: `(area, parent, codice)` o `(area, codice)` se
+  vogliamo `codice` unico tra padre+figli della stessa area.
 
 Editabile da admin Django e da UI Configurazione (`/configurazione/
-attivita/catalogo` con vista raggruppata per area).
+attivita/catalogo`) con vista ad albero raggruppata per area.
 
-**OPEN** — `codice` univoco globale o solo `(area, codice)`? Il secondo
-permette di avere "registrazione" sia in Contabilità che in altre aree
-senza conflitti, ma rende meno utile il codice come identificativo
-parlante. Suggerito: `(area, codice)` unique.
+**OPEN** — `codice` univoco globale, per area, o per (area, parent)?
+Suggerito: `(area, codice)` unique a livello di area (padri e figli non
+si chiamano mai uguale dentro la stessa area).
+
+**OPEN — collegamento a `ChecklistStep`** (fase 2): le sub-attività
+spesso replicano la struttura dei `ChecklistStep` per tipo adempimento.
+Si potrebbe aggiungere una FK opzionale `checklist_step` per mappare la
+sub-attività a uno step di un tipo adempimento, così che registrare ore
+sulla sub-attività possa anche "spuntare" lo step della checklist
+sull'adempimento collegato. Per la v1 non si fa: si parte solo con
+gerarchia padre/figlio libera, l'integrazione con la checklist arriva
+dopo se serve.
 
 #### `attivita.RegistrazioneAttivita`
 
@@ -149,8 +170,8 @@ registrato.
 | Campo | Tipo | Note |
 |---|---|---|
 | `utente` | FK UtenteStudio PROTECT | autore (chi ha svolto l'attività) |
-| `attivita` | FK Attivita PROTECT | l'attività svolta; porta con sé l'area di valorizzazione |
-| `area_valorizzazione` | FK AreaAziendale PROTECT | snapshot: **= attivita.area al momento del save**, NON area dell'utente |
+| `attivita` | FK Attivita PROTECT | l'attività svolta; può essere un padre (livello 1) o una sub-attività (livello 2), a scelta dell'utente |
+| `area_valorizzazione` | FK AreaAziendale PROTECT | snapshot: **= attivita.area al momento del save** (uguale per padre e figlia), NON area dell'utente |
 | `data` | date | giorno dell'attività |
 | `durata_ore` | Decimal(5,2) positivo | granularità: decimali di ora (es. `1.50`, `0.25`, `2.75`) |
 | `cliente` | FK Anagrafica PROTECT nullable | obbligatorio se `attivita.richiede_cliente=True` |
@@ -324,16 +345,28 @@ DEC: tutte e tre le modalità di inserimento coesistono.
   lato server: `> 0`, max 2 decimali.
 - Salvataggio HTMX, conferma toast inline, ritorno alla vista corrente
   con stato preservato.
-- L'utente NON sceglie l'area dell'attività: viene derivata dalla
-  categoria selezionata. Mostrato in form come label info ("Area di
-  valorizzazione: Consulenza Ordinaria — 50€/h costo, 75€/h tariffa")
-  per chiarezza.
+- L'utente NON sceglie l'area dell'attività: viene derivata dall'attività
+  selezionata. Mostrato in form come label info ("Area di valorizzazione:
+  Consulenza Ordinaria — 50€/h costo, 75€/h tariffa") per chiarezza.
+- **Selezione attività con sub-attività opzionale**: il form mostra un
+  primo select con le attività padre (raggruppate per area). Se
+  l'attività scelta ha figli, compare un secondo select opzionale con le
+  sub-attività ("nessun dettaglio" come opzione di default). L'utente
+  può lasciare il livello padre o scendere alla sub a sua scelta.
 
 ---
 
 ## Reportistica (priorità per release)
 
 DEC v1: **scheda addetto / timesheet personale**.
+
+**Aggregazione sub-attività**: tutti i report di default aggregano al
+livello **attività padre** (livello 1). Il dettaglio per sub-attività
+compare solo in viste esplicitamente richieste tramite un toggle / link
+"mostra dettaglio sub-attività" o in report dedicati. Logica
+implementativa: per ogni `RegistrazioneAttivita` si guarda
+`attivita.parent or attivita` per ricondurre al padre quando serve
+aggregare.
 
 ### v1 — Timesheet addetto
 
@@ -471,11 +504,15 @@ scadenza in cui si fa il grosso del lavoro).
 
 ### Fase 1 — Inserimento
 
-- Modello `Attivita` + `RegistrazioneAttivita`.
-- Modale globale di inserimento (1).
+- Modello `Attivita` (con `parent` self-FK, max 2 livelli) +
+  `RegistrazioneAttivita`.
+- UI di configurazione catalogo attività ad albero (per area).
+- Modale globale di inserimento (1), con select padre + select sub
+  opzionale.
 - Pagina diario giornaliero (2).
 - Pagina "le mie attività" con paginazione e filtri (pattern
-  `lista_clienti`).
+  `lista_clienti`); aggregazione default al livello padre + toggle
+  "mostra sub-attività".
 
 ### Fase 2 — Budget e timesheet
 
@@ -507,13 +544,22 @@ scadenza in cui si fa il grosso del lavoro).
    render: se andiamo su tabella storica delle tariffe, lo snapshot in
    colonna diventa ridondante.
 4. **Tabella ConsumoAtteso pre-calcolata** vs calcolo on-the-fly?
-5. **Vincolo categoria ↔ tipo adempimento**: warning soft o nulla?
-6. **Parser durata**: quale formato canonico in UI (es. consentire
-   "1.5", "1,5", "1:30", "90m")?
-7. **Adempimenti collegati**: filtraggio nell'autocomplete per cliente
-   + periodo corrente è sufficiente, o serve anche per "scaduti" /
-   "futuri"?
-8. **Eliminazione**: solo soft-delete (flag) o hard delete? Audit richiede
+5. **Vincolo `Attivita` ↔ tipo adempimento**: warning soft o nulla
+   nell'autocomplete adempimento in base all'attività scelta?
+6. **Parser durata**: input tollerante a "1.5" / "1,5". Altri formati
+   ammessi (es. "90m", "1h30")? Default no.
+7. **Granularità budget livello 2**: addetto×area (proposto) vs
+   addetto×Attivita. Da decidere nella sessione dedicata al budget.
+8. **Link sub-Attivita ↔ ChecklistStep**: in fase 2 mappare le
+   sub-attività ai checklist step dei tipi adempimento, per spuntare
+   automaticamente lo step quando si registrano ore? Forma del mapping
+   (1:1, 1:N, M:N)?
+9. **Codice Attivita**: unique per `(area, codice)` o solo `(codice)`
+   globale?
+10. **Adempimenti collegati**: filtraggio nell'autocomplete per cliente
+    + periodo corrente è sufficiente, o serve anche per "scaduti" /
+    "futuri"?
+11. **Eliminazione**: solo soft-delete (flag) o hard delete? Audit richiede
    soft, semplicità richiede hard.
 
 ---
