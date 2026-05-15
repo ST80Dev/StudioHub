@@ -1,73 +1,130 @@
 {% load static %}
-<aside class="flex w-56 shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-    <div class="flex h-12 items-center border-b border-slate-200 px-4 dark:border-slate-800">
-        <a href="{% url 'core:home' %}" class="flex items-center gap-2 font-semibold tracking-tight">
-            <span class="inline-flex h-6 w-6 items-center justify-center rounded bg-brand-600 text-[11px] font-bold text-white">SH</span>
-            <span>StudioHub</span>
-        </a>
-    </div>
-    <nav class="flex-1 overflow-y-auto py-2 text-sm">
-        {% with path=request.path %}
-        <a href="{% url 'core:home' %}"
-           class="flex items-center gap-2 px-4 py-2 hover:bg-slate-100 dark:hover:bg-slate-800
-                  {% if path == '/' %}bg-slate-100 font-medium text-brand-700 dark:bg-slate-800 dark:text-brand-500{% endif %}">
-            <span aria-hidden="true">🏠</span> Home
-        </a>
-        <a href="{% url 'anagrafica:list' %}"
-           class="flex items-center gap-2 px-4 py-2 hover:bg-slate-100 dark:hover:bg-slate-800
-                  {% if '/clienti/' in path %}bg-slate-100 font-medium text-brand-700 dark:bg-slate-800 dark:text-brand-500{% endif %}">
-            <span aria-hidden="true">👥</span> Clienti
-        </a>
-        <a href="{% url 'adempimenti:list' %}"
-           class="flex items-center gap-2 px-4 py-2 hover:bg-slate-100 dark:hover:bg-slate-800
-                  {% if path == '/adempimenti/' %}bg-slate-100 font-medium text-brand-700 dark:bg-slate-800 dark:text-brand-500{% endif %}">
-            <span aria-hidden="true">📋</span> Adempimenti
-        </a>
-        {% comment %}
-        Link diretti ai tipi adempimento con `ha_vista_dedicata=True`.
-        Popolati dal context processor `adempimenti.context_processors.tipi_dedicati`.
-        L'evidenziazione confronta la PK del tipo con il `catalogo_id` della
-        rotta attiva.
-        {% endcomment %}
-        {% for t in tipi_dedicati %}
-        <a href="{% url 'adempimenti:lista_tipo' t.pk %}"
-           class="flex items-center gap-2 px-6 py-1.5 text-[13px] hover:bg-slate-100 dark:hover:bg-slate-800
-                  {% if request.resolver_match.kwargs.catalogo_id == t.pk %}bg-slate-100 font-medium text-brand-700 dark:bg-slate-800 dark:text-brand-500{% endif %}">
-            <span aria-hidden="true">🧾</span> {{ t.abbreviazione|default:t.denominazione }}
-        </a>
-        {% endfor %}
-        <div class="mt-6 px-4 text-[11px] uppercase tracking-wider text-slate-400">In arrivo</div>
-        <span class="flex items-center gap-2 px-4 py-2 text-slate-400">
-            <span aria-hidden="true">📅</span> Calendario
-        </span>
-        <span class="flex items-center gap-2 px-4 py-2 text-slate-400">
-            <span aria-hidden="true">📊</span> Report
-        </span>
-        {% if user.is_staff %}
-        <div class="mt-6 px-4 text-[11px] uppercase tracking-wider text-slate-400">Amministrazione</div>
-        <a href="{% url 'configurazione:tipi_list' %}"
-           class="flex items-center gap-2 px-4 py-2 hover:bg-slate-100 dark:hover:bg-slate-800
-                  {% if '/configurazione/' in path %}bg-slate-100 font-medium text-brand-700 dark:bg-slate-800 dark:text-brand-500{% endif %}">
-            <span aria-hidden="true">🛠️</span> Configurazione
-        </a>
-        <a href="{% url 'importazione:list' %}"
-           class="flex items-center gap-2 px-4 py-2 hover:bg-slate-100 dark:hover:bg-slate-800
-                  {% if '/importazione/' in path %}bg-slate-100 font-medium text-brand-700 dark:bg-slate-800 dark:text-brand-500{% endif %}">
-            <span aria-hidden="true">📥</span> Importazione dati
-        </a>
-        <a href="{% url 'anagrafica:diagnostica' %}"
-           class="flex items-center gap-2 px-4 py-2 hover:bg-slate-100 dark:hover:bg-slate-800
-                  {% if '/clienti/diagnostica' in path %}bg-slate-100 font-medium text-brand-700 dark:bg-slate-800 dark:text-brand-500{% endif %}">
-            <span aria-hidden="true">🩺</span> Diagnostica dati
-        </a>
-        <a href="/admin/"
-           class="flex items-center gap-2 px-4 py-2 hover:bg-slate-100 dark:hover:bg-slate-800">
-            <span aria-hidden="true">⚙️</span> Admin Django
-        </a>
-        {% endif %}
-        {% endwith %}
-    </nav>
-    <div class="border-t border-slate-200 px-4 py-2 text-[11px] text-slate-400 dark:border-slate-800">
-        v0.1 · on-prem
+{# Sidebar collassabile: occupa sempre w-14 nel layout (solo icone). Al hover
+   il pannello si allarga in overlay (absolute) senza spostare il contenuto.
+   Auto-collassa dopo 3s di mouseleave; click su un link → navigazione
+   (la pagina ricarica e parte di nuovo collassata). #}
+<aside class="relative w-14 shrink-0"
+       x-data="{
+           expanded: false,
+           timer: null,
+           expand() { clearTimeout(this.timer); this.timer = null; this.expanded = true; },
+           scheduleCollapse() {
+               clearTimeout(this.timer);
+               this.timer = setTimeout(() => { this.expanded = false; this.timer = null; }, 3000);
+           },
+           collapseNow() { clearTimeout(this.timer); this.timer = null; this.expanded = false; }
+       }"
+       @mouseenter="expand()"
+       @mouseleave="scheduleCollapse()">
+    <div class="absolute inset-y-0 left-0 flex flex-col overflow-hidden border-r border-slate-200 bg-white transition-[width] duration-150 ease-out dark:border-slate-800 dark:bg-slate-900"
+         :class="expanded ? 'w-56 shadow-xl z-40' : 'w-14'">
+        <div class="flex h-12 items-center border-b border-slate-200 px-3 dark:border-slate-800">
+            <a href="{% url 'core:home' %}" class="flex items-center gap-2 font-semibold tracking-tight whitespace-nowrap">
+                <span class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded bg-brand-600 text-[11px] font-bold text-white">SH</span>
+                <span x-show="expanded" x-cloak>StudioHub</span>
+            </a>
+        </div>
+        <nav class="flex-1 overflow-y-auto overflow-x-hidden py-2 text-sm">
+            {% with path=request.path %}
+            <a href="{% url 'core:home' %}"
+               title="Home"
+               @click="collapseNow()"
+               class="flex items-center gap-2 px-4 py-2 whitespace-nowrap hover:bg-slate-100 dark:hover:bg-slate-800
+                      {% if path == '/' %}bg-slate-100 font-medium text-brand-700 dark:bg-slate-800 dark:text-brand-500{% endif %}">
+                <span aria-hidden="true" class="w-5 shrink-0 text-center">🏠</span>
+                <span x-show="expanded" x-cloak>Home</span>
+            </a>
+            <a href="{% url 'anagrafica:list' %}"
+               title="Clienti"
+               @click="collapseNow()"
+               class="flex items-center gap-2 px-4 py-2 whitespace-nowrap hover:bg-slate-100 dark:hover:bg-slate-800
+                      {% if '/clienti/' in path %}bg-slate-100 font-medium text-brand-700 dark:bg-slate-800 dark:text-brand-500{% endif %}">
+                <span aria-hidden="true" class="w-5 shrink-0 text-center">👥</span>
+                <span x-show="expanded" x-cloak>Clienti</span>
+            </a>
+            <a href="{% url 'adempimenti:list' %}"
+               title="Adempimenti"
+               @click="collapseNow()"
+               class="flex items-center gap-2 px-4 py-2 whitespace-nowrap hover:bg-slate-100 dark:hover:bg-slate-800
+                      {% if path == '/adempimenti/' %}bg-slate-100 font-medium text-brand-700 dark:bg-slate-800 dark:text-brand-500{% endif %}">
+                <span aria-hidden="true" class="w-5 shrink-0 text-center">📋</span>
+                <span x-show="expanded" x-cloak>Adempimenti</span>
+            </a>
+            {% comment %}
+            Link diretti ai tipi adempimento con `ha_vista_dedicata=True`.
+            Popolati dal context processor `adempimenti.context_processors.tipi_dedicati`.
+            L'evidenziazione confronta la PK del tipo con il `catalogo_id` della
+            rotta attiva. Quando la sidebar è collassata mostriamo solo
+            l'abbreviazione (max 8 char per convenzione del modello).
+            {% endcomment %}
+            {% for t in tipi_dedicati %}
+            <a href="{% url 'adempimenti:lista_tipo' t.pk %}"
+               title="{{ t.denominazione }}"
+               @click="collapseNow()"
+               class="flex items-center gap-2 py-1.5 text-[13px] whitespace-nowrap hover:bg-slate-100 dark:hover:bg-slate-800
+                      {% if request.resolver_match.kwargs.catalogo_id == t.pk %}bg-slate-100 font-medium text-brand-700 dark:bg-slate-800 dark:text-brand-500{% endif %}"
+               :class="expanded ? 'px-6' : 'px-2 justify-center'">
+                <span x-show="expanded" x-cloak aria-hidden="true">🧾</span>
+                <span x-show="expanded" x-cloak>{{ t.abbreviazione|default:t.denominazione }}</span>
+                <span x-show="!expanded" x-cloak class="text-[10px] font-semibold uppercase tracking-tight">{{ t.abbreviazione|default:t.denominazione|truncatechars:4 }}</span>
+            </a>
+            {% endfor %}
+
+            <div class="mt-6">
+                <div x-show="expanded" x-cloak class="px-4 text-[11px] uppercase tracking-wider text-slate-400">In arrivo</div>
+                <div x-show="!expanded" x-cloak class="mx-3 border-t border-slate-200 dark:border-slate-700"></div>
+            </div>
+            <span class="flex items-center gap-2 px-4 py-2 whitespace-nowrap text-slate-400" title="Calendario">
+                <span aria-hidden="true" class="w-5 shrink-0 text-center">📅</span>
+                <span x-show="expanded" x-cloak>Calendario</span>
+            </span>
+            <span class="flex items-center gap-2 px-4 py-2 whitespace-nowrap text-slate-400" title="Report">
+                <span aria-hidden="true" class="w-5 shrink-0 text-center">📊</span>
+                <span x-show="expanded" x-cloak>Report</span>
+            </span>
+
+            {% if user.is_staff %}
+            <div class="mt-6">
+                <div x-show="expanded" x-cloak class="px-4 text-[11px] uppercase tracking-wider text-slate-400">Amministrazione</div>
+                <div x-show="!expanded" x-cloak class="mx-3 border-t border-slate-200 dark:border-slate-700"></div>
+            </div>
+            <a href="{% url 'configurazione:tipi_list' %}"
+               title="Configurazione"
+               @click="collapseNow()"
+               class="flex items-center gap-2 px-4 py-2 whitespace-nowrap hover:bg-slate-100 dark:hover:bg-slate-800
+                      {% if '/configurazione/' in path %}bg-slate-100 font-medium text-brand-700 dark:bg-slate-800 dark:text-brand-500{% endif %}">
+                <span aria-hidden="true" class="w-5 shrink-0 text-center">🛠️</span>
+                <span x-show="expanded" x-cloak>Configurazione</span>
+            </a>
+            <a href="{% url 'importazione:list' %}"
+               title="Importazione dati"
+               @click="collapseNow()"
+               class="flex items-center gap-2 px-4 py-2 whitespace-nowrap hover:bg-slate-100 dark:hover:bg-slate-800
+                      {% if '/importazione/' in path %}bg-slate-100 font-medium text-brand-700 dark:bg-slate-800 dark:text-brand-500{% endif %}">
+                <span aria-hidden="true" class="w-5 shrink-0 text-center">📥</span>
+                <span x-show="expanded" x-cloak>Importazione dati</span>
+            </a>
+            <a href="{% url 'anagrafica:diagnostica' %}"
+               title="Diagnostica dati"
+               @click="collapseNow()"
+               class="flex items-center gap-2 px-4 py-2 whitespace-nowrap hover:bg-slate-100 dark:hover:bg-slate-800
+                      {% if '/clienti/diagnostica' in path %}bg-slate-100 font-medium text-brand-700 dark:bg-slate-800 dark:text-brand-500{% endif %}">
+                <span aria-hidden="true" class="w-5 shrink-0 text-center">🩺</span>
+                <span x-show="expanded" x-cloak>Diagnostica dati</span>
+            </a>
+            <a href="/admin/"
+               title="Admin Django"
+               @click="collapseNow()"
+               class="flex items-center gap-2 px-4 py-2 whitespace-nowrap hover:bg-slate-100 dark:hover:bg-slate-800">
+                <span aria-hidden="true" class="w-5 shrink-0 text-center">⚙️</span>
+                <span x-show="expanded" x-cloak>Admin Django</span>
+            </a>
+            {% endif %}
+            {% endwith %}
+        </nav>
+        <div class="border-t border-slate-200 px-4 py-2 text-[11px] whitespace-nowrap text-slate-400 dark:border-slate-800">
+            <span x-show="expanded" x-cloak>v0.1 · on-prem</span>
+            <span x-show="!expanded" x-cloak>v0.1</span>
+        </div>
     </div>
 </aside>
