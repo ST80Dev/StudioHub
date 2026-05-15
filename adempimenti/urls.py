@@ -42,6 +42,11 @@ urlpatterns = [
         name="tipo_rimuovi_riga",
     ),
     path(
+        "tipo/<int:catalogo_id>/salva-vista/",
+        views.tipo_salva_vista,
+        name="tipo_salva_vista",
+    ),
+    path(
         "tipo/<int:catalogo_id>/riga/<int:pk>/inline/<str:field>/edit/",
         views.tipo_inline_edit_form,
         name="tipo_inline_edit_form",

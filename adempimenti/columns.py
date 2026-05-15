@@ -268,21 +268,50 @@ def get_columns_for_tipo(
 
     `vista` puo' essere 'singolo' (vista per-periodo) o 'anno' (aggregata).
     """
-    # Import locale per evitare import circolare (models.py importa columns
-    # solo per validazione choices).
+    columns, _ = get_view_config_for_tipo(
+        tipo, vista=vista, exclude_per_period=exclude_per_period,
+    )
+    return columns
+
+
+def get_view_config_for_tipo(
+    tipo,
+    *,
+    vista: str = "singolo",
+    exclude_per_period: bool = False,
+) -> tuple[list[ColumnSpec], dict[str, int]]:
+    """Risolve (colonne, larghezze) per (tipo, vista).
+
+    Ritorna sempre una tupla; le larghezze sono un dict `{codice: px}` con
+    solo i codici per cui esiste un override (le altre useranno le classi
+    Tailwind di default da `ColumnSpec.css_th`).
+    """
     from .models import VistaAdempimentoColonne
 
     codes: list[str] = list(DEFAULT_COLUMN_CODES)
+    widths: dict[str, int] = {}
     if tipo is not None:
         config = (
             VistaAdempimentoColonne.objects
             .filter(tipo=tipo, vista=vista)
             .first()
         )
-        if config and config.colonne_codici:
-            codes = list(config.colonne_codici)
+        if config:
+            if config.colonne_codici:
+                codes = list(config.colonne_codici)
+            raw = config.larghezze_colonne or {}
+            # Sanifica: solo codici noti, valori interi ragionevoli (40..800).
+            for code, val in raw.items():
+                if code not in STANDARD_COLUMNS:
+                    continue
+                try:
+                    px = int(val)
+                except (TypeError, ValueError):
+                    continue
+                if 40 <= px <= 800:
+                    widths[code] = px
 
-    return resolve_columns(codes, exclude_per_period=exclude_per_period)
+    return resolve_columns(codes, exclude_per_period=exclude_per_period), widths
 
 
 def available_column_choices() -> list[tuple[str, str]]:

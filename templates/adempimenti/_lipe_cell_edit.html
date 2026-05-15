@@ -3,7 +3,7 @@
 Cella in modalità edit (vista tipo). Form HTMX: change/blur → POST a tipo_inline_save.
 Parametri: `r`, `field`, `meta` (widget, choices), `catalogo_id`.
 {% endcomment %}
-<td class="px-1 bg-amber-50 dark:bg-amber-950/40">
+<td class="px-1 bg-amber-50 dark:bg-amber-950/40" data-col-code="{{ field }}">
   <form hx-post="{% url 'adempimenti:tipo_inline_save' catalogo_id r.pk field %}"
         hx-target="closest td"
         hx-swap="outerHTML"

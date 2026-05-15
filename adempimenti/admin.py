@@ -130,7 +130,14 @@ class VistaAdempimentoColonneForm(forms.ModelForm):
 
     class Meta:
         model = VistaAdempimentoColonne
-        fields = ("tipo", "vista", "colonne", "colonne_ordinate")
+        fields = ("tipo", "vista", "colonne", "colonne_ordinate", "larghezze_colonne")
+        help_texts = {
+            "larghezze_colonne": (
+                "Override fine. Di norma si imposta dalla UI di pagina "
+                "(\"Modifica vista\") con il drag del bordo destro delle "
+                "colonne. Formato: {\"<codice>\": <px>}, con px in 40..800."
+            ),
+        }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

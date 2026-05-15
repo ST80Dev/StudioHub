@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 {% load anagrafica_extras %}
 {% load adempimenti_extras %}
 {% block title %}Liquidazione IVA Trimestrale {{ anno }} — anno intero — StudioHub{% endblock %}
@@ -137,18 +138,20 @@
 </details>
 {% endif %}
 
-<div class="overflow-auto rounded-md border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+{% include "adempimenti/_design_mode_toolbar.html" %}
+
+<div class="sh-view-host overflow-auto rounded-md border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
     <table class="sh-table sh-table-sticky-first w-full">
         <thead class="bg-slate-50 dark:bg-slate-800/40">
             <tr>
-                {% for column in columns %}{% column_header column %}{% endfor %}
+                {% for column in columns %}{% column_header column column_widths %}{% endfor %}
                 <th class="px-3 py-1 text-center text-[11px] uppercase tracking-wider text-slate-500">Q1</th>
                 <th class="px-3 py-1 text-center text-[11px] uppercase tracking-wider text-slate-500">Q2</th>
                 <th class="px-3 py-1 text-center text-[11px] uppercase tracking-wider text-slate-500">Q3</th>
                 <th class="px-3 py-1 text-center text-[11px] uppercase tracking-wider text-slate-500">Q4</th>
             </tr>
             <tr class="bg-white dark:bg-slate-900 border-y border-slate-200 dark:border-slate-700">
-                {% for column in columns %}{% column_filter column %}{% endfor %}
+                {% for column in columns %}{% column_filter column column_widths %}{% endfor %}
                 <th class="px-1 py-1"></th>
                 <th class="px-1 py-1"></th>
                 <th class="px-1 py-1"></th>

@@ -1,0 +1,53 @@
+{% comment %}
+Toolbar "Modifica vista". Visibile solo a staff/superuser.
+
+Parametri attesi nel contesto:
+- `tipo`: TipoAdempimentoCatalogo
+- `vista_corrente`: "singolo" | "anno"
+
+Wrappa l'area tabella (un elemento con classe `sh-view-host`) e
+permette di entrare/uscire da "design mode", riordinare e ridimensionare
+le colonne, e salvare la configurazione su `VistaAdempimentoColonne`.
+
+Il salvataggio richiede `data-table-selector` (CSS selector della
+<table>) e usa `data-save-url` come endpoint POST JSON.
+{% endcomment %}
+{% if request.user.is_staff %}
+<div class="mb-2 flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-slate-50 p-2 text-xs dark:border-slate-700 dark:bg-slate-800/40"
+     data-design-toolbar
+     data-save-url="{% url 'adempimenti:tipo_salva_vista' tipo.pk %}"
+     data-vista="{{ vista_corrente }}"
+     data-table-selector=".sh-view-host table">
+    <span class="font-semibold text-slate-600 dark:text-slate-300">Vista colonne ({{ vista_corrente }}):</span>
+
+    <button type="button"
+            data-design-toggle
+            class="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-700 dark:hover:bg-slate-600">
+        <span data-label-off>✎ Modifica vista</span>
+        <span data-label-on class="hidden">✕ Esci modifica</span>
+    </button>
+
+    <span data-design-status class="hidden text-amber-700 dark:text-amber-300">
+        Modalità modifica attiva — trascina ⋮⋮ per riordinare, trascina il bordo destro per ridimensionare.
+    </span>
+
+    <span data-design-dirty class="hidden font-semibold text-amber-700 dark:text-amber-300">
+        ● Modifiche non salvate
+    </span>
+
+    <div class="ml-auto flex items-center gap-2">
+        <button type="button"
+                data-design-reset
+                class="hidden rounded-md border border-slate-300 bg-white px-2 py-1 text-xs hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-700 dark:hover:bg-slate-600">
+            Annulla modifiche
+        </button>
+        <button type="button"
+                data-design-save
+                class="hidden rounded-md bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                disabled>
+            Salva vista per tutti
+        </button>
+    </div>
+</div>
+<script src="{% static 'adempimenti/design_mode.js' %}"></script>
+{% endif %}

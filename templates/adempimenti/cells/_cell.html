@@ -23,16 +23,16 @@ Nota: nelle viste aggregate (es. LIPE-anno) `editable_inline` non e' True
 e queste colonne non rientrano nel ciclo (escluse da `PER_PERIOD_CODES`).
 {% endcomment %}
 {% if column.code == "stato" and editable_inline and record.pk %}
-    {% include "adempimenti/_lipe_cell_display.html" with r=record field="stato" catalogo_id=record.tipo_id %}
+    {% include "adempimenti/_lipe_cell_display.html" with r=record field="stato" catalogo_id=record.tipo_id col_code=column.code %}
 {% elif column.code == "data_invio" and editable_inline and record.pk %}
-    {% include "adempimenti/_lipe_cell_display.html" with r=record field="data_invio" catalogo_id=record.tipo_id %}
+    {% include "adempimenti/_lipe_cell_display.html" with r=record field="data_invio" catalogo_id=record.tipo_id col_code=column.code %}
 {% elif column.code == "protocollo_invio" and editable_inline and record.pk %}
-    {% include "adempimenti/_lipe_cell_display.html" with r=record field="protocollo_invio" catalogo_id=record.tipo_id %}
+    {% include "adempimenti/_lipe_cell_display.html" with r=record field="protocollo_invio" catalogo_id=record.tipo_id col_code=column.code %}
 {% elif column.code == "note" and editable_inline and record.pk %}
-    {% include "adempimenti/_lipe_cell_display.html" with r=record field="note" catalogo_id=record.tipo_id %}
+    {% include "adempimenti/_lipe_cell_display.html" with r=record field="note" catalogo_id=record.tipo_id col_code=column.code %}
 {% else %}
 {% with anag=record.anag|default:record.anagrafica %}
-<td class="{{ column.css_td }}">
+<td class="{{ column.css_td }}" data-col-code="{{ column.code }}">
     {% if column.code == "cliente" %}
         <a href="{{ anag.get_absolute_url }}" class="font-medium hover:underline">{{ anag.denominazione }}</a>
     {% elif column.code == "codice_interno" %}

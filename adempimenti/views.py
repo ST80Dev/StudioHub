@@ -1,10 +1,11 @@
+import json
 from datetime import date
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db.models import Count, Exists, OuterRef, Q
-from django.http import HttpResponseBadRequest
+from django.http import HttpResponseBadRequest, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
@@ -20,12 +21,13 @@ from anagrafica.models import (
 )
 
 from . import stati as _stati
-from .columns import get_columns_for_tipo
+from .columns import STANDARD_COLUMNS, get_view_config_for_tipo
 from .models import (
     Adempimento,
     StatoAdempimento,
     StatoAdempimentoTipo,
     TipoAdempimentoCatalogo,
+    VistaAdempimentoColonne,
     tipi_applicabili,
 )
 from .services import conta_obsoleti, sincronizza_adempimenti
@@ -285,7 +287,7 @@ def lista_tipo(request, catalogo_id: int):
     # (stato/data_invio/protocollo_invio/note) sono entrambe ammesse.
     from django.db.models import Prefetch
     from anagrafica.models import AnagraficaReferenteStudio
-    columns = get_columns_for_tipo(tipo, vista="singolo")
+    columns, column_widths = get_view_config_for_tipo(tipo, vista="singolo")
 
     # Prefetch referenti per evitare N+1 sulle colonne referente_contab/
     # referente_consul. Filtrato sull'anno fiscale corrente.
@@ -374,6 +376,8 @@ def lista_tipo(request, catalogo_id: int):
         "righe": page.object_list,
         # nuovo sistema colonne dinamico
         "columns": columns,
+        "column_widths": column_widths,
+        "vista_corrente": "singolo",
         # opzioni dei select
         "stati": [(s.codice, s.denominazione) for s in stati_tipo],
         # filtri (per la banda totali e bulk)
@@ -497,7 +501,9 @@ def _render_lipe_anno(request, tipo, anno):
     )
 
     # Colonne standard configurate per la vista anno (sempre senza per-periodo).
-    columns = get_columns_for_tipo(tipo, vista="anno", exclude_per_period=True)
+    columns, column_widths = get_view_config_for_tipo(
+        tipo, vista="anno", exclude_per_period=True,
+    )
 
     # Filtri applicati dinamicamente in base alle colonne attive.
     # Niente filtro stato qui: una riga annuale aggrega 4 potenziali stati.
@@ -568,6 +574,8 @@ def _render_lipe_anno(request, tipo, anno):
             "clienti_aggregati": page.object_list,
             # nuovo sistema colonne
             "columns": columns,
+            "column_widths": column_widths,
+            "vista_corrente": "anno",
             "sort": sort_raw,
             # totali
             "totali": totali,
@@ -821,3 +829,101 @@ def tipo_rimuovi_riga(request, catalogo_id: int, pk: int):
     qs = request.POST.get("qs", "")
     back_url = reverse("adempimenti:lista_tipo", args=[catalogo_id])
     return redirect(back_url + ("?" + qs if qs else ""))
+
+
+# ---------------------------------------------------------------------------
+# Salvataggio configurazione vista (ordine + larghezze colonne)
+# ---------------------------------------------------------------------------
+
+# Vista codes ammessi: devono corrispondere a `VistaAdempimentoColonne.Vista`.
+_VISTE_AMMESSE = {"singolo", "anno"}
+# Limite di sicurezza sulla larghezza colonna in pixel.
+_WIDTH_MIN = 40
+_WIDTH_MAX = 800
+
+
+@login_required
+@require_POST
+def tipo_salva_vista(request, catalogo_id: int):
+    """Salva ordine e larghezze colonne per (tipo, vista).
+
+    Solo staff. Body JSON:
+        {"vista": "singolo"|"anno",
+         "colonne": ["cliente", "stato", ...],
+         "larghezze": {"cliente": 240, "stato": 90, ...}}
+
+    Risponde JSON `{"ok": true}` o `{"ok": false, "error": "..."}`. Il
+    client deve poi ricaricare la pagina per vedere il nuovo layout (i
+    messaggi Django mostrano la conferma).
+    """
+    if not request.user.is_staff:
+        return JsonResponse(
+            {"ok": False, "error": "Permesso negato (richiesto staff)."},
+            status=403,
+        )
+
+    tipo = get_object_or_404(TipoAdempimentoCatalogo, pk=catalogo_id)
+
+    try:
+        payload = json.loads(request.body.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        return JsonResponse({"ok": False, "error": "JSON non valido."}, status=400)
+
+    vista = (payload.get("vista") or "").strip()
+    if vista not in _VISTE_AMMESSE:
+        return JsonResponse(
+            {"ok": False, "error": f"Vista non valida: {vista!r}."}, status=400,
+        )
+
+    colonne_raw = payload.get("colonne") or []
+    if not isinstance(colonne_raw, list):
+        return JsonResponse(
+            {"ok": False, "error": "`colonne` deve essere una lista."}, status=400,
+        )
+    # Filtra solo codici noti, preserva ordine, deduplica.
+    seen: set[str] = set()
+    colonne: list[str] = []
+    for code in colonne_raw:
+        if not isinstance(code, str) or code not in STANDARD_COLUMNS:
+            continue
+        if code in seen:
+            continue
+        seen.add(code)
+        colonne.append(code)
+    if not colonne:
+        return JsonResponse(
+            {"ok": False, "error": "Nessuna colonna valida nel payload."},
+            status=400,
+        )
+
+    larghezze_raw = payload.get("larghezze") or {}
+    if not isinstance(larghezze_raw, dict):
+        return JsonResponse(
+            {"ok": False, "error": "`larghezze` deve essere un oggetto."},
+            status=400,
+        )
+    larghezze: dict[str, int] = {}
+    for code, val in larghezze_raw.items():
+        if code not in STANDARD_COLUMNS:
+            continue
+        try:
+            px = int(val)
+        except (TypeError, ValueError):
+            continue
+        if _WIDTH_MIN <= px <= _WIDTH_MAX:
+            larghezze[code] = px
+
+    config, _ = VistaAdempimentoColonne.objects.update_or_create(
+        tipo=tipo,
+        vista=vista,
+        defaults={
+            "colonne_codici": colonne,
+            "larghezze_colonne": larghezze,
+        },
+    )
+    messages.success(
+        request,
+        f"Vista \"{config.get_vista_display()}\" salvata "
+        f"({len(colonne)} colonne, {len(larghezze)} larghezze).",
+    )
+    return JsonResponse({"ok": True})

@@ -127,23 +127,52 @@ def iniziali_utente(user) -> str:
     return uname[:2].upper()
 
 
+def _width_style(column, widths):
+    """Compone l'attributo style per la larghezza colonna (se override)."""
+    if not widths:
+        return ""
+    px = widths.get(column.code)
+    if not px:
+        return ""
+    # min-width + width per fissare la larghezza anche con table-layout auto.
+    return f"width:{px}px;min-width:{px}px;max-width:{px}px;"
+
+
 @register.simple_tag(takes_context=True)
-def column_header(context, column):
+def column_header(context, column, widths=None):
     """Header sortabile per una `ColumnSpec`.
 
     Replica la logica di `anagrafica/_sort_header.html` ma generica:
     se la colonna ha `sort_field`, mostra il link con freccia direzione;
     altrimenti mostra solo l'etichetta.
+
+    Se `widths` e' un dict {codice: px}, applica la larghezza inline.
+    Aggiunge `data-col-code` per il riordino drag&drop in design mode.
     """
     request = context["request"]
     current = request.GET.get("sort", "")
     label = column.label
+    style = _width_style(column, widths)
+    cls = (
+        column.css_th
+        + " text-left text-[11px] uppercase tracking-wider text-slate-500 relative"
+    )
+
+    # Maniglia di resize (visibile solo in design mode via CSS).
+    resize_handle = (
+        '<span class="sh-col-resize" aria-hidden="true"></span>'
+    )
 
     if not column.sort_field:
         return format_html(
-            '<th class="{}">{}</th>',
-            column.css_th + " text-left text-[11px] uppercase tracking-wider text-slate-500",
-            label,
+            '<th class="{cls}" style="{style}" data-col-code="{code}">'
+            '<span class="sh-col-grip" aria-hidden="true">⋮⋮</span>'
+            '{label}{handle}</th>',
+            cls=cls,
+            style=style,
+            code=column.code,
+            label=label,
+            handle=mark_safe(resize_handle),
         )
 
     field = column.sort_field
@@ -160,23 +189,35 @@ def column_header(context, column):
     params["sort"] = next_sort
     url = "?" + params.urlencode()
     return format_html(
-        '<th class="{cls}"><a href="{url}" class="hover:underline">{label} <span class="opacity-50">{arrow}</span></a></th>',
-        cls=column.css_th + " text-left text-[11px] uppercase tracking-wider text-slate-500",
+        '<th class="{cls}" style="{style}" data-col-code="{code}">'
+        '<span class="sh-col-grip" aria-hidden="true">⋮⋮</span>'
+        '<a href="{url}" class="hover:underline">{label} <span class="opacity-50">{arrow}</span></a>'
+        '{handle}</th>',
+        cls=cls,
+        style=style,
+        code=column.code,
         url=url,
         label=label,
         arrow=arrow,
+        handle=mark_safe(resize_handle),
     )
 
 
 @register.simple_tag(takes_context=True)
-def column_filter(context, column):
+def column_filter(context, column, widths=None):
     """Cella filtro per una `ColumnSpec` (sotto l'header).
 
     Render input testo o select a seconda di `column.filter_kind`.
     Usa attributo `form="filters-form"` per delegare il submit al form esterno.
     """
+    style = _width_style(column, widths)
     if not column.filter_param or not column.filter_kind:
-        return format_html('<th class="{}"></th>', column.css_th)
+        return format_html(
+            '<th class="{cls}" style="{style}" data-col-code="{code}"></th>',
+            cls=column.css_th,
+            style=style,
+            code=column.code,
+        )
 
     request = context["request"]
     value = request.GET.get(column.filter_param, "")
@@ -187,9 +228,12 @@ def column_filter(context, column):
 
     if column.filter_kind == "text":
         return format_html(
-            '<th class="px-1 py-1"><input form="filters-form" type="text" '
+            '<th class="px-1 py-1" style="{style}" data-col-code="{code}">'
+            '<input form="filters-form" type="text" '
             'name="{name}" value="{val}" placeholder="filtra" '
             'class="{cls}"></th>',
+            style=style,
+            code=column.code,
             name=column.filter_param,
             val=value,
             cls=base_input,
@@ -223,8 +267,11 @@ def column_filter(context, column):
             ))
 
     return format_html(
-        '<th class="px-1 py-1"><select form="filters-form" name="{name}" '
+        '<th class="px-1 py-1" style="{style}" data-col-code="{code}">'
+        '<select form="filters-form" name="{name}" '
         'onchange="this.form.submit()" class="{cls}">{opts}</select></th>',
+        style=style,
+        code=column.code,
         name=column.filter_param,
         cls=base_input,
         opts=mark_safe("".join(opts_parts)),

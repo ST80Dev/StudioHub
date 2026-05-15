@@ -59,3 +59,69 @@ html.dark .sh-state.sh-state-todo   { background: rgba(51,65,85,.4);    color: r
 html.dark .sh-state.sh-state-review { background: rgba(3,105,161,.25);  color: rgb(125 211 252); }
 html.dark .sh-state.sh-state-idle   { background: rgba(71,85,105,.4);   color: rgb(203 213 225); }
 html.dark .sh-state.sh-state-error  { background: rgba(153,27,27,.25);  color: rgb(252 165 165); }
+
+/* ---------------------------------------------------------------- */
+/* "Modifica vista": drag&drop e resize delle colonne                */
+/* ---------------------------------------------------------------- */
+
+/* Maniglie di drag/resize: nascoste di default, visibili in design mode. */
+.sh-col-grip,
+.sh-col-resize {
+    display: none;
+}
+
+.sh-design-mode .sh-col-grip {
+    display: inline-block;
+    cursor: grab;
+    color: rgb(148 163 184);
+    font-size: 10px;
+    margin-right: 4px;
+    user-select: none;
+}
+.sh-design-mode .sh-col-grip:active { cursor: grabbing; }
+
+.sh-design-mode th[data-col-code] {
+    position: relative;
+}
+
+.sh-design-mode .sh-col-resize {
+    display: block;
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 6px;
+    height: 100%;
+    cursor: col-resize;
+    background: transparent;
+    z-index: 3;
+}
+.sh-design-mode .sh-col-resize:hover,
+.sh-design-mode th[data-col-code].sh-resizing .sh-col-resize {
+    background: rgba(59, 130, 246, 0.4);
+}
+
+/* Evidenzia thead durante design mode. */
+.sh-design-mode thead th[data-col-code] {
+    outline: 1px dashed rgba(59, 130, 246, 0.5);
+    outline-offset: -1px;
+}
+
+/* Disabilita interazioni concorrenti (filtri, click cella) in design mode. */
+.sh-design-mode tbody td[data-col-code] {
+    pointer-events: none;
+    opacity: 0.7;
+}
+.sh-design-mode thead tr:nth-child(2) input,
+.sh-design-mode thead tr:nth-child(2) select {
+    pointer-events: none;
+    opacity: 0.5;
+}
+
+/* Sortable.js ghost (mentre si trascina). */
+.sh-col-ghost {
+    opacity: 0.4;
+    background: rgba(59, 130, 246, 0.15) !important;
+}
+.sh-col-chosen {
+    background: rgba(59, 130, 246, 0.08);
+}

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 {% load anagrafica_extras %}
 {% load adempimenti_extras %}
 {% block title %}Liquidazione IVA Trimestrale {{ anno }} Q{{ periodo }} — StudioHub{% endblock %}
@@ -214,24 +215,27 @@ comunque).
         </span>
     </div>
 
-    <div class="overflow-auto rounded-md border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+    {% include "adempimenti/_design_mode_toolbar.html" %}
+
+    <div class="sh-view-host overflow-auto rounded-md border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         <table class="sh-table sh-table-sticky-first w-full">
             <thead class="bg-slate-50 dark:bg-slate-800/40">
                 {# Riga 1: titoli colonna sortabili. Le colonne provengono da
                    `get_columns_for_tipo(tipo, vista='singolo')` — configurabili
-                   da admin (`VistaAdempimentoColonne`). #}
+                   da admin (`VistaAdempimentoColonne`) o dalla toolbar
+                   "Modifica vista" qui sopra. #}
                 <tr class="text-left text-[11px] uppercase tracking-wider text-slate-500">
                     <th class="px-2">
                         <input type="checkbox" id="bulk-check-all"
                                onclick="document.querySelectorAll('.bulk-check').forEach(c => c.checked = this.checked); document.dispatchEvent(new Event('change', {bubbles:true}));">
                     </th>
-                    {% for col in columns %}{% column_header col %}{% endfor %}
+                    {% for col in columns %}{% column_header col column_widths %}{% endfor %}
                     <th class="px-3"></th>
                 </tr>
                 {# Riga 2: filtri per colonna (text/select, parametrizzati dalla ColumnSpec). #}
                 <tr class="bg-white dark:bg-slate-900 border-y border-slate-200 dark:border-slate-700">
                     <th class="px-2"></th>
-                    {% for col in columns %}{% column_filter col %}{% endfor %}
+                    {% for col in columns %}{% column_filter col column_widths %}{% endfor %}
                     <th class="px-1 py-1"></th>
                 </tr>
             </thead>

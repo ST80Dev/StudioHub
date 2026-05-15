@@ -703,6 +703,16 @@ class VistaAdempimentoColonne(models.Model):
             "`adempimenti.columns.STANDARD_COLUMNS` per i codici disponibili."
         ),
     )
+    larghezze_colonne = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=(
+            "Larghezze colonne in pixel come dict {codice: int}. "
+            "Editabile da UI in pagina (\"Modifica vista\") o qui per "
+            "override fine. I codici assenti usano la larghezza Tailwind "
+            "di default definita in `columns.py`."
+        ),
+    )
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
